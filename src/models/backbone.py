@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-
 '''
 @File    :   encoder.py
 @Time    :   2021/06/29 16:22:59
-@Author  :   AbyssGaze 
+@Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 '''
@@ -26,9 +24,12 @@ class PatchMerging(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.
         Default: nn.LayerNorm
     """
-
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm,
-                 patch_size=[2], num_input_patch_size=1):
+    def __init__(self,
+                 input_resolution,
+                 dim,
+                 norm_layer=nn.LayerNorm,
+                 patch_size=[2],
+                 num_input_patch_size=1):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
@@ -38,14 +39,17 @@ class PatchMerging(nn.Module):
 
         for i, ps in enumerate(patch_size):
             if i == len(patch_size) - 1:
-                out_dim = 2 * dim // 2 ** i
+                out_dim = 2 * dim // 2**i
             else:
-                out_dim = 2 * dim // 2 ** (i + 1)
+                out_dim = 2 * dim // 2**(i + 1)
             stride = 2
             padding = (ps - stride) // 2
             self.reductions.append(
-                nn.Conv2d(dim, out_dim, kernel_size=ps,
-                          stride=stride, padding=padding))
+                nn.Conv2d(dim,
+                          out_dim,
+                          kernel_size=ps,
+                          stride=stride,
+                          padding=padding))
 
     def forward(self, x):  # , H, W):
         """
@@ -75,9 +79,12 @@ class PatchEmbed(nn.Module):
         Default: 96.
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
-
-    def __init__(self, img_size=224, patch_size=[4], in_chans=3,
-                 embed_dim=96, norm_layer=None):
+    def __init__(self,
+                 img_size=224,
+                 patch_size=[4],
+                 in_chans=3,
+                 embed_dim=96,
+                 norm_layer=None):
         super().__init__()
         img_size = to_2tuple(img_size)
         patches_resolution = [img_size[0] // 4, img_size[1] // 4]
@@ -93,13 +100,17 @@ class PatchEmbed(nn.Module):
         # dim:  d//2   d//4   d//8  d//8
         for i, ps in enumerate(patch_size):
             if i == len(patch_size) - 1:
-                dim = embed_dim // 2 ** i
+                dim = embed_dim // 2**i
             else:
-                dim = embed_dim // 2 ** (i + 1)
+                dim = embed_dim // 2**(i + 1)
             stride = 4
             padding = (ps - 4) // 2
-            self.projs.append(nn.Conv2d(in_chans, dim, kernel_size=ps,
-                                        stride=stride, padding=padding))
+            self.projs.append(
+                nn.Conv2d(in_chans,
+                          dim,
+                          kernel_size=ps,
+                          stride=stride,
+                          padding=padding))
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
@@ -124,11 +135,13 @@ class ResnetEncoder(nn.Module):
         self.cfg = cfg
         self.last_layer = cfg.BACKBONE.LAST_LAYER
 
-        resnets = {18: models.resnet18,
-                   34: models.resnet34,
-                   50: models.resnet50,
-                   101: models.resnet101,
-                   152: models.resnet152}
+        resnets = {
+            18: models.resnet18,
+            34: models.resnet34,
+            50: models.resnet50,
+            101: models.resnet101,
+            152: models.resnet152
+        }
         # pdb.set_trace()
         encoder = resnets[cfg.BACKBONE.NUM_LAYERS](True)
         self.encoder = encoder

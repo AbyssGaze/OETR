@@ -1,43 +1,40 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-
 '''
 @File    :   train.py
 @Time    :   2021/06/29 17:19:36
-@Author  :   AbyssGaze 
+@Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 '''
 import argparse
 import os
 from pathlib import Path
-import cv2
-import numpy as np
 
+import numpy as np
 import torch
 
-from src.model import OverlapModel, SADModel, SACDModel
-from utils.utils import (read_image, 
-                        visualize_overlap,
-                        visualize_overlap_gt,
-                        )
+from src.model import SACDModel, SADModel
+from utils.utils import read_image, visualize_overlap, visualize_overlap_gt
 
 torch.set_grad_enabled(False)
+
 
 def main(opt):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = SADModel(opt.num_layers, max_shape=opt.resize).eval().to(device)
     model.load_state_dict(torch.load(opt.checkpoint))
     with open(opt.input_pairs, 'r') as f:
-        pairs = [l.split() for l in f.readlines()]
-    
+        pairs = [line.split() for line in f.readlines()]
+
     for i, pair in enumerate(pairs):
         name1, name2 = pair[:2]
         # Load the image pair.
-        image1, inp1, scales1 = read_image(
-            os.path.join(opt.input_dir, name1), device, opt.resize, 0, opt.resize_float)
-        image2, inp2, scales2 = read_image(
-            os.path.join(opt.input_dir, name2), device, opt.resize, 0, opt.resize_float)
+        image1, inp1, scales1 = read_image(os.path.join(opt.input_dir,
+                                                        name1), device,
+                                           opt.resize, 0, opt.resize_float)
+        image2, inp2, scales2 = read_image(os.path.join(opt.input_dir,
+                                                        name2), device,
+                                           opt.resize, 0, opt.resize_float)
 
         box1, box2 = model.forward_dummy(inp1, inp2)
         output = os.path.join(opt.output_dir, name1 + '-' + name2)
@@ -47,25 +44,28 @@ def main(opt):
         if len(pair) > 2:
             gt_box1 = np.array(pair[2:6]).astype(int)
             gt_box2 = np.array(pair[6:10]).astype(int)
-            visualize_overlap_gt(image1, np_box1, gt_box1,
-                                 image2, np_box2, gt_box2, output)
+            visualize_overlap_gt(image1, np_box1, gt_box1, image2, np_box2,
+                                 gt_box2, output)
         else:
             visualize_overlap(image1, np_box1, image2, np_box2, output)
+
 
 def main_scale(opt):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = SACDModel(opt.num_layers, max_shape=opt.resize).eval().to(device)
     model.load_state_dict(torch.load(opt.checkpoint))
     with open(opt.input_pairs, 'r') as f:
-        pairs = [l.split(' ') for l in f.readlines()]
-    
+        pairs = [line.split(' ') for line in f.readlines()]
+
     for i, pair in enumerate(pairs):
         name1, name2 = pair[0], pair[5]
         # Load the image pair.
-        image1, inp1, scales1 = read_image(
-            os.path.join(opt.input_dir, name1), device, opt.resize, 0, opt.resize_float)
-        image2, inp2, scales2 = read_image(
-            os.path.join(opt.input_dir, name2), device, opt.resize, 0, opt.resize_float)
+        image1, inp1, scales1 = read_image(os.path.join(opt.input_dir,
+                                                        name1), device,
+                                           opt.resize, 0, opt.resize_float)
+        image2, inp2, scales2 = read_image(os.path.join(opt.input_dir,
+                                                        name2), device,
+                                           opt.resize, 0, opt.resize_float)
 
         box1, box2 = model.forward_dummy(inp1, inp2)
         output = os.path.join(opt.output_dir, name1 + '-' + name2)
@@ -75,41 +75,51 @@ def main_scale(opt):
         if len(pair) == 10:
             gt_box1 = np.array(pair[4].split(',')).astype(int)
             gt_box2 = np.array(pair[9].split(',')).astype(int)
-            visualize_overlap_gt(image1, np_box1, gt_box1,
-                                 image2, np_box2, gt_box2, output)
+            visualize_overlap_gt(image1, np_box1, gt_box1, image2, np_box2,
+                                 gt_box2, output)
         else:
             visualize_overlap(image1, np_box1, image2, np_box2, output)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-    description='Generate megadepth image pairs',
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        description='Generate megadepth image pairs',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument('--input_pairs',
+                        type=str,
+                        default='assets/megadepth/pairs.txt',
+                        help='Path to the list of image pairs')
+    parser.add_argument('--input_dir',
+                        type=str,
+                        default='assets/megadepth/',
+                        help='Path to the directory that contains the images')
+    parser.add_argument('--output_dir',
+                        type=str,
+                        default='outputs/',
+                        help='Path to the directory that contains the images')
+    parser.add_argument('--checkpoint',
+                        type=str,
+                        default='assets/checkpoints/models.pth',
+                        help='Path to the checkpoints of matching model')
+    parser.add_argument('--num_layers',
+                        type=int,
+                        default=50,
+                        help='resnet layers')
     parser.add_argument(
-        '--input_pairs', type=str, default='assets/megadepth/pairs.txt',
-        help='Path to the list of image pairs')
-    parser.add_argument(
-        '--input_dir', type=str, default='assets/megadepth/',
-        help='Path to the directory that contains the images')
-    parser.add_argument(
-        '--output_dir', type=str, default='outputs/',
-        help='Path to the directory that contains the images')
-    parser.add_argument('--checkpoint', type=str, default='assets/checkpoints/models.pth',
-        help='Path to the checkpoints of matching model')
-    parser.add_argument('--num_layers', type=int, default=50, 
-        help='resnet layers')
-    parser.add_argument(
-        '--resize', type=int, nargs='+', default=[640, 480],
-        help='Resize the input image before running inference. If two numbers, '
-             'resize to the exact dimensions, if one number, resize the max '
-             'dimension, if -1, do not resize')
-    parser.add_argument(
-        '--resize_float', action='store_true',
-        help='Resize the image after casting uint8 to float')
-    parser.add_argument(
-        '--scale', action='store_true',
-        help='Use scale datasets')
+        '--resize',
+        type=int,
+        nargs='+',
+        default=[640, 480],
+        help='Resize the input image before running inference. If two numbers,'
+        'resize to the exact dimensions, if one number, resize the max '
+        'dimension, if -1, do not resize')
+    parser.add_argument('--resize_float',
+                        action='store_true',
+                        help='Resize the image after casting uint8 to float')
+    parser.add_argument('--scale',
+                        action='store_true',
+                        help='Use scale datasets')
     opt = parser.parse_args()
     Path(opt.output_dir).mkdir(exist_ok=True, parents=True)
     if opt.scale:

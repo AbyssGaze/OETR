@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-
 '''
 @File    :   losses.py
 @Time    :   2021/08/02 20:29:38
-@Author  :   AbyssGaze 
+@Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 '''
@@ -14,13 +12,13 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .losses import FocalLoss, SigmoidFocalLoss
+from .losses import SigmoidFocalLoss
 
 INF = 1e8
 
 
 def get_num_gpus():
-    return int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
+    return int(os.environ['WORLD_SIZE']) if 'WORLD_SIZE' in os.environ else 1
 
 
 def reduce_sum(tensor):
@@ -33,7 +31,7 @@ def reduce_sum(tensor):
 
 
 class IOULoss(nn.Module):
-    def __init__(self, loss_type="iou"):
+    def __init__(self, loss_type='iou'):
         super(IOULoss, self).__init__()
         self.loss_type = loss_type
 
@@ -82,20 +80,19 @@ class IOULoss(nn.Module):
             return losses.sum()
 
 
-def sigmoid_focal_loss(
-    inputs: torch.Tensor,
-    targets: torch.Tensor,
-    alpha: float = -1,
-    gamma: float = 2,
-    reduction: str = "none",
-) -> torch.Tensor:
+def sigmoid_focal_loss(inputs,
+                       targets,
+                       alpha=-1.0,
+                       gamma=2.0,
+                       reduction='none'):
     """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Loss used in RetinaNet for dense detection:
+    https://arxiv.org/abs/1708.02002.
     Args:
         inputs: A float tensor of arbitrary shape.
                 The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
+        targets: A float tensor with the same shape as inputs. Stores the
+                binary classification label for each element in inputs
                 (0 for the negative class and 1 for the positive class).
         alpha: (optional) Weighting factor in range (0,1) to balance
                 positive vs negative examples. Default = -1 (no weighting).
@@ -109,35 +106,37 @@ def sigmoid_focal_loss(
         Loss tensor with the reduction option applied.
     """
     p = torch.sigmoid(inputs)
-    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets,
-                                                 reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(inputs,
+                                                 targets,
+                                                 reduction='none')
     p_t = p * targets + (1 - p) * (1 - targets)
-    loss = ce_loss * ((1 - p_t) ** gamma)
+    loss = ce_loss * ((1 - p_t)**gamma)
 
     if alpha >= 0:
         alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
         loss = alpha_t * loss
 
-    if reduction == "mean":
+    if reduction == 'mean':
         loss = loss.mean()
-    elif reduction == "sum":
+    elif reduction == 'sum':
         loss = loss.sum()
 
     return loss
 
 
 class FCOSLossComputation(object):
-    """
-    This class computes the FCOS losses.
-    """
-    def __init__(self, stride=16, center_sampling_radius=2.0,
-                 iou_loss_type='giou', norm_reg_targets=False):
+    """This class computes the FCOS losses."""
+    def __init__(self,
+                 stride=16,
+                 center_sampling_radius=2.0,
+                 iou_loss_type='giou',
+                 norm_reg_targets=False):
         self.stride = stride
         self.center_sampling_radius = self.stride * center_sampling_radius
         self.iou_loss_type = iou_loss_type
         self.cls_loss_func = SigmoidFocalLoss(gamma=2.0, alpha=0.25)
         self.box_reg_loss_func = IOULoss(self.iou_loss_type)
-        self.centerness_loss_func = nn.BCEWithLogitsLoss(reduction="sum")
+        self.centerness_loss_func = nn.BCEWithLogitsLoss(reduction='sum')
         self.norm_reg_targets = norm_reg_targets
 
     def compute_centerness_targets(self, reg_targets):
@@ -184,22 +183,20 @@ class FCOSLossComputation(object):
         bottom = target[:, 3].unsqueeze(-1) -\
             locations[:, 1][None].expand(K, num_points)
         reg_targets = torch.stack([left, top, right, bottom], dim=2)
-    
+
         if self.center_sampling_radius > 0:
             is_in_boxes = self.get_sample_region(
-                target, locations, 
-                ratios=self.center_sampling_radius
-            )
+                target, locations, ratios=self.center_sampling_radius)
         else:
-            # no center sampling, it will use all the locations within a ground-truth box
             is_in_boxes = reg_targets.min(dim=2)[0] > 0
-        
+
         if self.norm_reg_targets:
             reg_targets = reg_targets / self.stride
 
         return is_in_boxes, reg_targets
 
-    def __call__(self, locations, box_cls, box_regression, centerness, targets):
+    def __call__(self, locations, box_cls, box_regression, centerness,
+                 targets):
         """
         Arguments:
             locations: dense pixel for feature map ((HxW)x2)
@@ -236,9 +233,7 @@ class FCOSLossComputation(object):
         num_pos_avg_per_gpu = max(total_num_pos / float(num_gpus), 1.0)
 
         cls_loss = self.cls_loss_func(
-            box_cls_flatten,
-            labels_flatten.long()
-        ) / num_pos_avg_per_gpu
+            box_cls_flatten, labels_flatten.long()) / num_pos_avg_per_gpu
 
         if pos_inds.numel() > 0:
             centerness_targets =\
@@ -250,18 +245,13 @@ class FCOSLossComputation(object):
                 reduce_sum(centerness_targets.sum()).item() / float(num_gpus)
 
             reg_loss = self.box_reg_loss_func(
-                box_regression_flatten,
-                reg_targets_flatten,
-                centerness_targets
-            ) / sum_centerness_targets_avg_per_gpu
+                box_regression_flatten, reg_targets_flatten,
+                centerness_targets) / sum_centerness_targets_avg_per_gpu
             centerness_loss = self.centerness_loss_func(
-                centerness_flatten,
-                centerness_targets
-            ) / num_pos_avg_per_gpu
+                centerness_flatten, centerness_targets) / num_pos_avg_per_gpu
         else:
             reg_loss = box_regression_flatten.sum()
             reduce_sum(centerness_flatten.new_tensor([0.0]))
             centerness_loss = centerness_flatten.sum()
 
         return cls_loss, reg_loss, centerness_loss
-

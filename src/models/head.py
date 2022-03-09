@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-
 '''
 @File    :   head.py
 @Time    :   2021/07/20 17:07:56
-@Author  :   AbyssGaze 
+@Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 '''
@@ -17,7 +15,6 @@ from torch import nn
 
 
 class DynamicConv(nn.Module):
-
     def __init__(self, hidden_dim):
         super().__init__()
         self.hidden_dim = hidden_dim
@@ -47,10 +44,10 @@ class DynamicConv(nn.Module):
 class attention2d(nn.Module):
     def __init__(self, in_planes, ratios, K, temperature, init_weight=True):
         super(attention2d, self).__init__()
-        assert temperature % 3==1
+        assert temperature % 3 == 1
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         if in_planes != 3:
-            hidden_planes = int(in_planes*ratios)+1
+            hidden_planes = int(in_planes * ratios) + 1
         else:
             hidden_planes = K
         self.fc1 = nn.Conv2d(in_planes, hidden_planes, 1, bias=False)
@@ -62,7 +59,8 @@ class attention2d(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out',
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
                                         nonlinearity='relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
@@ -75,19 +73,28 @@ class attention2d(nn.Module):
             self.temperature -= 3
             print('Change temperature to:', str(self.temperature))
 
-
     def forward(self, x):
         x = self.avgpool(x)
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x).view(x.size(0), -1)
-        return F.softmax(x/self.temperature, 1)
+        return F.softmax(x / self.temperature, 1)
 
 
 class Dynamic_conv2d(nn.Module):
-    def __init__(self, in_planes, out_planes, kernel_size, ratio=0.25,
-                 stride=1, padding=0, dilation=1, groups=1, bias=True,
-                 K=4, temperature=34, init_weight=True):
+    def __init__(self,
+                 in_planes,
+                 out_planes,
+                 kernel_size,
+                 ratio=0.25,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 K=4,
+                 temperature=34,
+                 init_weight=True):
         super(Dynamic_conv2d, self).__init__()
         assert in_planes % groups == 0
         self.in_planes = in_planes
@@ -101,9 +108,10 @@ class Dynamic_conv2d(nn.Module):
         self.K = K
         self.attention = attention2d(in_planes, ratio, K, temperature)
 
-        self.weight = nn.Parameter(
-            torch.randn(K, out_planes, in_planes//groups,
-                        kernel_size, kernel_size), requires_grad=True)
+        self.weight = nn.Parameter(torch.randn(K, out_planes,
+                                               in_planes // groups,
+                                               kernel_size, kernel_size),
+                                   requires_grad=True)
         if bias:
             self.bias = nn.Parameter(torch.Tensor(K, out_planes))
         else:
@@ -111,7 +119,6 @@ class Dynamic_conv2d(nn.Module):
         if init_weight:
             self._initialize_weights()
 
-    #TODO 初始化
     def _initialize_weights(self):
         for i in range(self.K):
             nn.init.kaiming_uniform_(self.weight[i])
@@ -125,23 +132,30 @@ class Dynamic_conv2d(nn.Module):
         x = x.view(1, -1, height, width)
         weight = self.weight.view(self.K, -1)
 
-        aggregate_weight = torch.mm(
-            softmax_attention, weight).view(
-                -1, self.in_planes, self.kernel_size, self.kernel_size)
+        aggregate_weight = torch.mm(softmax_attention,
+                                    weight).view(-1, self.in_planes,
+                                                 self.kernel_size,
+                                                 self.kernel_size)
         if self.bias is not None:
             aggregate_bias = torch.mm(softmax_attention, self.bias).view(-1)
-            output = F.conv2d(x, weight=aggregate_weight, bias=aggregate_bias,
-                              stride=self.stride, padding=self.padding,
+            output = F.conv2d(x,
+                              weight=aggregate_weight,
+                              bias=aggregate_bias,
+                              stride=self.stride,
+                              padding=self.padding,
                               dilation=self.dilation,
                               groups=self.groups * batch_size)
         else:
-            output = F.conv2d(x, weight=aggregate_weight, bias=None,
-                              stride=self.stride, padding=self.padding,
+            output = F.conv2d(x,
+                              weight=aggregate_weight,
+                              bias=None,
+                              stride=self.stride,
+                              padding=self.padding,
                               dilation=self.dilation,
                               groups=self.groups * batch_size)
 
-        output = output.view(batch_size, self.out_planes,
-                             output.size(-2), output.size(-1))
+        output = output.view(batch_size, self.out_planes, output.size(-2),
+                             output.size(-1))
         return output
 
 
@@ -155,8 +169,12 @@ class Scale(nn.Module):
 
 
 class FCOSHead(torch.nn.Module):
-    def __init__(self, in_channels, prior_prob=0.01, stride=16,
-                 norm_reg_targets=False, centerness_on_reg=True,
+    def __init__(self,
+                 in_channels,
+                 prior_prob=0.01,
+                 stride=16,
+                 norm_reg_targets=False,
+                 centerness_on_reg=True,
                  training=True):
         """
         Arguments:
@@ -171,42 +189,48 @@ class FCOSHead(torch.nn.Module):
         self.centerness_on_reg = centerness_on_reg
 
         self.cls_tower = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1,
-                      padding=1, bias=True),
-            nn.GroupNorm(32, in_channels),
-            nn.ReLU()
-        )
+            nn.Conv2d(in_channels,
+                      in_channels,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1,
+                      bias=True), nn.GroupNorm(32, in_channels), nn.ReLU())
         self.bbox_tower = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1,
-                      padding=1, bias=True),
-            nn.GroupNorm(32, in_channels),
-            nn.ReLU()
-        )
+            nn.Conv2d(in_channels,
+                      in_channels,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1,
+                      bias=True), nn.GroupNorm(32, in_channels), nn.ReLU())
 
-        self.cls_logits = nn.Conv2d(
-            in_channels, num_classes, kernel_size=3, stride=1,
-            padding=1
-        )
-        self.bbox_pred = nn.Conv2d(
-            in_channels, 4, kernel_size=3, stride=1,
-            padding=1
-        )
-        self.centerness = nn.Conv2d(
-            in_channels, 1, kernel_size=3, stride=1,
-            padding=1
-        )
+        self.cls_logits = nn.Conv2d(in_channels,
+                                    num_classes,
+                                    kernel_size=3,
+                                    stride=1,
+                                    padding=1)
+        self.bbox_pred = nn.Conv2d(in_channels,
+                                   4,
+                                   kernel_size=3,
+                                   stride=1,
+                                   padding=1)
+        self.centerness = nn.Conv2d(in_channels,
+                                    1,
+                                    kernel_size=3,
+                                    stride=1,
+                                    padding=1)
 
         # initialization
-        for modules in [self.cls_tower, self.bbox_tower,
-                        self.cls_logits, self.bbox_pred,
-                        self.centerness]:
-            for l in modules.modules():
-                if isinstance(l, nn.Conv2d):
-                    torch.nn.init.normal_(l.weight, std=0.01)
-                    torch.nn.init.constant_(l.bias, 0)
+        for modules in [
+                self.cls_tower, self.bbox_tower, self.cls_logits,
+                self.bbox_pred, self.centerness
+        ]:
+            for module in modules.modules():
+                if isinstance(module, nn.Conv2d):
+                    torch.nn.init.normal_(module.weight, std=0.01)
+                    torch.nn.init.constant_(module.bias, 0)
 
         # initialize the bias for focal loss
-        
+
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         torch.nn.init.constant_(self.cls_logits.bias, bias_value)
 
