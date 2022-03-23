@@ -10,16 +10,13 @@
 import argparse
 import os
 
-import cv2
-import h5py
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from src.datasets.utils import (numpy_overlap_box, resize_dataset,
-                                visualize_box, visualize_mask)
+from src.datasets.utils import (numpy_overlap_box, recover_pair, visualize_box,
+                                visualize_mask)
 
 
 class MegaDepthPairsDataset(Dataset):
@@ -139,74 +136,26 @@ class MegaDepthPairsDataset(Dataset):
         Args:
             pair_metadata (dict): contains intrinsic, pose, depth and image path
         """
-        depth_path1 = os.path.join(self.base_path,
-                                   pair_metadata['depth_path1'])
-        with h5py.File(depth_path1, 'r') as hdf5_file:
-            depth1 = np.array(hdf5_file['/depth'])
-        assert np.min(depth1) >= 0
-        image_path1 = os.path.join(self.base_path,
-                                   pair_metadata['image_path1'])
-        image1 = cv2.imread(image_path1)
-        assert image1.shape[0] == depth1.shape[0] and image1.shape[
-            1] == depth1.shape[1]
-        intrinsics1 = pair_metadata['intrinsics1']
-        pose1 = pair_metadata['pose1']
-
-        depth_path2 = os.path.join(self.base_path,
-                                   pair_metadata['depth_path2'])
-        with h5py.File(depth_path2, 'r') as hdf5_file:
-            depth2 = np.array(hdf5_file['/depth'])
-        assert np.min(depth2) >= 0
-        image_path2 = os.path.join(self.base_path,
-                                   pair_metadata['image_path2'])
-        image2 = cv2.imread(image_path2)
-        assert image2.shape[0] == depth2.shape[0] and image2.shape[
-            1] == depth2.shape[1]
-        intrinsics2 = pair_metadata['intrinsics2']
-        pose2 = pair_metadata['pose2']
-
-        image1, resize_ratio1 = resize_dataset(image1, self.image_size)
-        image2, resize_ratio2 = resize_dataset(image2, self.image_size)
-
-        central_match = pair_metadata['central_match'] * np.concatenate(
-            (resize_ratio1, resize_ratio2))
-        image1, bbox1, image2, bbox2 = self.crop(image1, image2, central_match)
-
-        depth1, _ = resize_dataset(depth1, self.image_size, True)
-        depth2, _ = resize_dataset(depth2, self.image_size, True)
-
-        depth1 = depth1[bbox1[0]:bbox1[0] + self.image_size[0],
-                        bbox1[1]:bbox1[1] + self.image_size[1], ]
-        depth2 = depth2[bbox2[0]:bbox2[0] + self.image_size[0],
-                        bbox2[1]:bbox2[1] + self.image_size[1], ]
-        if self.with_mask:
-            mask_path1 = os.path.join(
-                self.base_path,
-                pair_metadata['image_path1'].replace(
-                    'images', 'masks').replace('jpg',
-                                               'png').replace('JPG', 'png'),
-            )
-            mask_path2 = os.path.join(
-                self.base_path,
-                pair_metadata['image_path2'].replace(
-                    'images', 'masks').replace('jpg',
-                                               'png').replace('JPG', 'png'),
-            )
-
-            mask1 = np.array(Image.open(mask_path1))
-            mask2 = np.array(Image.open(mask_path2))
-            mask1, _ = resize_dataset(mask1, self.image_size, True)
-            mask2, _ = resize_dataset(mask2, self.image_size, True)
-
-            mask1 = mask1[bbox1[0]:bbox1[0] + self.image_size[0],
-                          bbox1[1]:bbox1[1] + self.image_size[1], ]
-            mask2 = mask2[bbox2[0]:bbox2[0] + self.image_size[0],
-                          bbox2[1]:bbox2[1] + self.image_size[1], ]
-        else:
-            mask1 = np.zeros(1)
-            mask2 = np.zeros(1)
-        match_file_name = (pair_metadata['image_path1'].split('/')[-1] + '-' +
-                           pair_metadata['image_path2'].split('/')[-1])
+        (
+            image1,
+            depth1,
+            intrinsics1,
+            pose1,
+            bbox1,
+            resize_ratio1,
+            bbox1,
+            mask1,
+            image2,
+            depth2,
+            intrinsics2,
+            pose2,
+            bbox2,
+            resize_ratio2,
+            bbox2,
+            mask2,
+            match_file_name,
+            central_match,
+        ) = recover_pair(self.base_path, self.image_size, pair_metadata)
 
         (
             overlap_box1,
@@ -248,30 +197,6 @@ class MegaDepthPairsDataset(Dataset):
             match_file_name,
             central_match,
             overlap_valid,
-        )
-
-    def crop(self, image1, image2, central_match):
-        bbox1_i = max(int(central_match[0]) - self.image_size[0] // 2, 0)
-        if bbox1_i + self.image_size[0] >= image1.shape[0]:
-            bbox1_i = image1.shape[0] - self.image_size[0]
-        bbox1_j = max(int(central_match[1]) - self.image_size[1] // 2, 0)
-        if bbox1_j + self.image_size[1] >= image1.shape[1]:
-            bbox1_j = image1.shape[1] - self.image_size[1]
-
-        bbox2_i = max(int(central_match[2]) - self.image_size[1] // 2, 0)
-        if bbox2_i + self.image_size[1] >= image2.shape[0]:
-            bbox2_i = image2.shape[0] - self.image_size[1]
-        bbox2_j = max(int(central_match[3]) - self.image_size[1] // 2, 0)
-        if bbox2_j + self.image_size[1] >= image2.shape[1]:
-            bbox2_j = image2.shape[1] - self.image_size[1]
-
-        return (
-            image1[bbox1_i:bbox1_i + self.image_size[0],
-                   bbox1_j:bbox1_j + self.image_size[1], ],
-            np.array([bbox1_i, bbox1_j]),
-            image2[bbox2_i:bbox2_i + self.image_size[0],
-                   bbox2_j:bbox2_j + self.image_size[1], ],
-            np.array([bbox2_i, bbox2_j]),
         )
 
     def __getitem__(self, idx):

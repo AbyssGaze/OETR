@@ -11,8 +11,10 @@ import argparse
 import os
 
 import cv2
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
 
 def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
@@ -185,6 +187,124 @@ def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
     mask1 = get_maskes(valid_uv1, h, w)
     mask2 = get_maskes(valid_uv2, h, w)
     return box1, mask1, box2, mask2
+
+
+def crop(image1, image2, central_match, image_size):
+    """crop patch from the central match and protect patch, not outside the
+    boundary."""
+    bbox1_i = max(int(central_match[0]) - image_size[0] // 2, 0)
+    if bbox1_i + image_size[0] >= image1.shape[0]:
+        bbox1_i = image1.shape[0] - image_size[0]
+    bbox1_j = max(int(central_match[1]) - image_size[1] // 2, 0)
+    if bbox1_j + image_size[1] >= image1.shape[1]:
+        bbox1_j = image1.shape[1] - image_size[1]
+
+    bbox2_i = max(int(central_match[2]) - image_size[1] // 2, 0)
+    if bbox2_i + image_size[1] >= image2.shape[0]:
+        bbox2_i = image2.shape[0] - image_size[1]
+    bbox2_j = max(int(central_match[3]) - image_size[1] // 2, 0)
+    if bbox2_j + image_size[1] >= image2.shape[1]:
+        bbox2_j = image2.shape[1] - image_size[1]
+
+    return (
+        image1[bbox1_i:bbox1_i + image_size[0],
+               bbox1_j:bbox1_j + image_size[1], ],
+        np.array([bbox1_i, bbox1_j]),
+        image2[bbox2_i:bbox2_i + image_size[0],
+               bbox2_j:bbox2_j + image_size[1], ],
+        np.array([bbox2_i, bbox2_j]),
+    )
+
+
+def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
+    """calculate image pairs information from metadata.
+
+    Args:
+        pair_metadata (dict): contains intrinsic, pose, depth and image path
+    """
+    depth_path1 = os.path.join(base_path, pair_metadata['depth_path1'])
+    with h5py.File(depth_path1, 'r') as hdf5_file:
+        depth1 = np.array(hdf5_file['/depth'])
+    assert np.min(depth1) >= 0
+    image_path1 = os.path.join(base_path, pair_metadata['image_path1'])
+    gray1 = cv2.imread(image_path1, cv2.IMREAD_GRAYSCALE)
+    assert gray1.shape[0] == depth1.shape[0] and gray1.shape[
+        1] == depth1.shape[1]
+    intrinsics1 = pair_metadata['intrinsics1']
+    pose1 = pair_metadata['pose1']
+
+    depth_path2 = os.path.join(base_path, pair_metadata['depth_path2'])
+    with h5py.File(depth_path2, 'r') as hdf5_file:
+        depth2 = np.array(hdf5_file['/depth'])
+    assert np.min(depth2) >= 0
+    image_path2 = os.path.join(base_path, pair_metadata['image_path2'])
+    gray2 = cv2.imread(image_path2, cv2.IMREAD_GRAYSCALE)
+    assert gray2.shape[0] == depth2.shape[0] and gray2.shape[
+        1] == depth2.shape[1]
+    intrinsics2 = pair_metadata['intrinsics2']
+    pose2 = pair_metadata['pose2']
+
+    gray1, resize_ratio1 = resize_dataset(gray1, image_size)
+    gray2, resize_ratio2 = resize_dataset(gray2, image_size)
+
+    central_match = pair_metadata['central_match'] * np.concatenate(
+        (resize_ratio1, resize_ratio2))
+    gray1, bbox1, gray2, bbox2 = crop(gray1, gray2, central_match, image_size)
+
+    depth1, _ = resize_dataset(depth1, image_size, True)
+    depth2, _ = resize_dataset(depth2, image_size, True)
+
+    depth1 = depth1[bbox1[0]:bbox1[0] + image_size[0],
+                    bbox1[1]:bbox1[1] + image_size[1], ]
+    depth2 = depth2[bbox2[0]:bbox2[0] + image_size[0],
+                    bbox2[1]:bbox2[1] + image_size[1], ]
+    if with_mask:
+        mask_path1 = os.path.join(
+            base_path,
+            pair_metadata['image_path1'].replace('images', 'masks').replace(
+                'jpg', 'png').replace('JPG', 'png'),
+        )
+        mask_path2 = os.path.join(
+            base_path,
+            pair_metadata['image_path2'].replace('images', 'masks').replace(
+                'jpg', 'png').replace('JPG', 'png'),
+        )
+
+        mask1 = np.array(Image.open(mask_path1))
+        mask2 = np.array(Image.open(mask_path2))
+        mask1, _ = resize_dataset(mask1, image_size, True)
+        mask2, _ = resize_dataset(mask2, image_size, True)
+
+        mask1 = mask1[bbox1[0]:bbox1[0] + image_size[0],
+                      bbox1[1]:bbox1[1] + image_size[1], ]
+        mask2 = mask2[bbox2[0]:bbox2[0] + image_size[0],
+                      bbox2[1]:bbox2[1] + image_size[1], ]
+    else:
+        mask1 = np.zeros(1)
+        mask2 = np.zeros(1)
+    match_file_name = (pair_metadata['image_path1'].split('/')[-1] + '_' +
+                       pair_metadata['image_path2'].split('/')[-1])
+
+    return (
+        gray1,
+        depth1,
+        intrinsics1,
+        pose1,
+        bbox1,
+        resize_ratio1,
+        bbox1,
+        mask1,
+        gray2,
+        depth2,
+        intrinsics2,
+        pose2,
+        bbox2,
+        resize_ratio2,
+        bbox2,
+        mask2,
+        match_file_name,
+        central_match,
+    )
 
 
 def statistics_image_pairs(pairs_list_path, dataset_path):
