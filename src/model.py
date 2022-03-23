@@ -38,11 +38,8 @@ def MLP(channels, do_bn=True):
     return nn.Sequential(*layers)
 
 
-"""OETR model architecture
-"""
-
-
 class OETR(nn.Module):
+    """OETR model architecture."""
     def __init__(self, cfg):
         super(OETR, self).__init__()
         self.backbone = ResnetEncoder(cfg)
@@ -485,6 +482,87 @@ class OETR_FC(nn.Module):
                 'pred_bbox2': box2,
                 'loss': loss.mean()
             }
+
+    # def forward_seg(self, data):
+    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
+    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
+    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
+    #     feat_c1 = rearrange(self.pos_encoding(feat1), 'n c h w -> n (h w) c')
+    #     feat_c2 = rearrange(self.pos_encoding(feat2), 'n c h w -> n (h w) c')
+    #     # self-cross attention for images
+    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
+    #     # reshape channel feature to spatial feature
+    #     feat_c1 = rearrange(feat_c1, 'n (h w) c -> n c h w')
+    #     feat_c2 = rearrange(feat_c2, 'n (h w) c -> n c h w')
+
+    #     feat_c1 = torch.sum(feat_c1, 1) / feat_c1.shape[1]
+    #     feat_c2 = torch.sum(feat_c2, 1) / feat_c2.shape[1]
+    #     feat = torch.cat((feat_c1, feat_c2), dim=1)
+
+    #     bbox_pred = self.fc_reg(feat)
+    #     box1 = delta2bbox(bbox_pred[:, :4], max_shape=self.max_shape)
+    #     box2 = delta2bbox(bbox_pred[:, 4:], max_shape=self.max_shape)
+    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
+    #                     box2, data['overlap_box2'][data['overlap_valid']])
+    #     return {'pred_bbox1': box1,
+    #             'pred_bbox2': box2,
+    #             'loss': loss.mean()}
+
+    # def forward_reg(self, data):
+    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
+    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
+    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
+    #     feat_c1 = rearrange(feat1, 'n c h w -> n (h w) c')
+    #     feat_c2 = rearrange(feat2, 'n c h w -> n (h w) c')
+    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
+
+    #     feat_c1 = torch.sum(feat_c1, 1) / feat_c1.shape[1]
+    #     feat_c2 = torch.sum(feat_c2, 1) / feat_c2.shape[1]
+    #     feat = torch.cat((feat_c1, feat_c2), dim=1)
+
+    #     bbox_pred = self.fc_reg(feat)
+    #     box1 = delta2bbox(bbox_pred[:, :4], max_shape=self.max_shape)
+    #     box2 = delta2bbox(bbox_pred[:, 4:], max_shape=self.max_shape)
+
+    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
+    #                     box2, data['overlap_box2'][data['overlap_valid']])
+    #     return {'pred_bbox1': box1,
+    #             'pred_bbox2': box2,
+    #             'loss': loss.mean()}
+
+    # def forward_match(self, data):
+    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
+    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
+    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
+    #     b,c,h1,w1 = feat1.shape
+    #     b,c,h2,w2 = feat2.shape
+
+    #     feat_c1 = rearrange(self.pos_encoding(feat1), 'n c h w -> n (h w) c')
+    #     feat_c2 = rearrange(self.pos_encoding(feat2), 'n c h w -> n (h w) c')
+    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
+
+    #     # normalize
+    #     feat_c1, feat_c2 = map(lambda feat: feat / feat.shape[-1]**.5,
+    #                            [feat_c1, feat_c2])
+
+    #     sim_matrix = torch.einsum("nlc,nsc->nls", feat_c1,
+    #                                 feat_c2) / 0.1
+    #     conf_matrix = F.softmax(sim_matrix, 1) * F.softmax(sim_matrix, 2)
+    #     mask = conf_matrix > 0.01
+    #     mask_c1, _ = mask.max(dim=2)
+    #     mask_c1 = mask_c1.reshape(b, h1, w1).int()
+    #     mask_c2, _ = mask.max(dim=1)
+    #     mask_c2 = mask_c2.reshape(b, h2, w2).int()
+
+    #     box1 = mask2bbox(mask_c1, max_shape=self.max_shape)
+    #     box2 = mask2bbox(mask_c2, max_shape=self.max_shape)
+
+    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
+    #                     box2, data['overlap_box2'][data['overlap_valid']])
+
+    #     return {'pred_bbox1': box1,
+    #             'pred_bbox2': box2,
+    #             'loss': loss.mean()}
 
     # inference pipeline
     def forward_dummy(self, image1, image2):

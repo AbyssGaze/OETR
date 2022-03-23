@@ -37,6 +37,7 @@ class MegaDepthPairsDataset(Dataset):
         image_size=[640, 640],
         with_mask=False,
     ):
+        # Read all image pairs information from pairs_list_path
         self.total_pairs = []
         with open(pairs_list_path, 'r') as f:
             self.total_pairs = [line.split() for line in f.readlines()]
@@ -59,45 +60,6 @@ class MegaDepthPairsDataset(Dataset):
         self.total_dataset = []
         self.init_dataset()
 
-    def overlap_box_simple(self,
-                           overlap1,
-                           bbox1,
-                           ratio1,
-                           overlap2,
-                           bbox2,
-                           ratio2,
-                           w=640,
-                           h=640):
-
-        overlap_bbox1 = overlap1 * np.tile(ratio1, 2)
-        overlap_bbox2 = overlap2 * np.tile(ratio2, 2)
-        box1 = [
-            overlap_bbox1[0] - bbox1[1],
-            overlap_bbox1[1] - bbox1[0],
-            overlap_bbox1[2] - bbox1[1],
-            overlap_bbox1[3] - bbox1[0],
-        ]
-        box2 = [
-            overlap_bbox2[0] - bbox2[1],
-            overlap_bbox2[1] - bbox2[0],
-            overlap_bbox2[2] - bbox2[1],
-            overlap_bbox2[3] - bbox2[0],
-        ]
-        # overlap with outsize images
-        resize_crop_bbox1 = np.array([
-            box1[0].clip(0, w),
-            box1[1].clip(0, h),
-            box1[2].clip(0, w),
-            box1[3].clip(0, h),
-        ])
-        resize_crop_bbox2 = np.array([
-            box2[0].clip(0, w),
-            box2[1].clip(0, h),
-            box2[2].clip(0, w),
-            box2[3].clip(0, h),
-        ])
-        return resize_crop_bbox1, resize_crop_bbox2, True
-
     def overlap_box(self, K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
                     bbox2, ratio2):
         box1, mask1, box2, mask2 = numpy_overlap_box(K1, depth1, pose1, bbox1,
@@ -107,6 +69,8 @@ class MegaDepthPairsDataset(Dataset):
         return box1, box2, mask1, mask2, True
 
     def init_dataset(self):
+        """init datasets from preprocessed data, output relative directory and
+        geometry info."""
         self.total_dataset = []
         for _, data in enumerate(self.total_pairs):
             K1 = np.array(data[2].split(','), dtype=float).reshape(3, 3)
@@ -133,6 +97,7 @@ class MegaDepthPairsDataset(Dataset):
             })
 
     def build_dataset(self):
+        """After every epoch, build the dataset once."""
         if not self.train:
             np_random_state = np.random.get_state()
             np.random.seed(42)
@@ -169,6 +134,11 @@ class MegaDepthPairsDataset(Dataset):
         return len(self.dataset)
 
     def recover_pair(self, pair_metadata):
+        """calculate image pairs information from metadata.
+
+        Args:
+            pair_metadata (dict): contains intrinsic, pose, depth and image path
+        """
         depth_path1 = os.path.join(self.base_path,
                                    pair_metadata['depth_path1'])
         with h5py.File(depth_path1, 'r') as hdf5_file:

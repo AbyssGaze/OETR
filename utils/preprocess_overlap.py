@@ -24,7 +24,15 @@ from src.datasets.utils import numpy_overlap_box, resize_dataset
 
 def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
                   depth2, output):
-    """visualization image pairs co-visible area."""
+    """visualization image pairs co-visible area.
+
+    Args:
+        image1, image2 (np.array): origin image
+        bbox1, bbox2 (np.array): co-visible bounding box
+        points1, points2 (np.array): valid depth 2D uv coordinate
+        depth1, depth2 (np.array): depth map of image1 and image2
+        output (str): output directory
+    """
     left = cv2.rectangle(
         np.stack([image1.numpy()] * 3, -1)[0], bbox1[0], bbox1[1], (255, 0, 0),
         2)
@@ -220,6 +228,11 @@ class MegaDepthDataset(Dataset):
         return len(self.dataset)
 
     def recover_pair(self, pair_metadata):
+        """calculate image pairs information from metadata.
+
+        Args:
+            pair_metadata (dict): contains intrinsic, pose, depth and image path
+        """
         depth_path1 = os.path.join(self.base_path,
                                    pair_metadata['depth_path1'])
         with h5py.File(depth_path1, 'r') as hdf5_file:
@@ -416,6 +429,7 @@ def main(
             batch['bbox2'][0].numpy(),
             batch['ratio2'][0].numpy(),
         )
+        # Visualization groundtruth
         visualize_box(
             batch['image0'][0] * 255,
             box1,

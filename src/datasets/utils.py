@@ -146,6 +146,7 @@ def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
     y1 = (v1 + bbox1[0] + 0.5) / ratio1[0]
     X1 = (x1 - K1[0, 2]) * (Z1 / K1[0, 0])
     Y1 = (y1 - K1[1, 2]) * (Z1 / K1[1, 1])
+    # Homogeneous coordinates
     XYZ1_hom = np.concatenate(
         [
             X1.reshape(1, -1),
@@ -155,6 +156,7 @@ def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
         ],
         axis=0,
     )
+    # Warp points to camera2
     XYZ2_hom = pose2 @ np.linalg.inv(pose1) @ XYZ1_hom
     XYZ2 = XYZ2_hom[:-1, :] / XYZ2_hom[-1, :].reshape(1, -1)
 
