@@ -13,14 +13,11 @@ from einops.einops import rearrange
 from kornia.utils import create_meshgrid
 
 from .losses.losses import CycleOverlapLoss, IouOverlapLoss
-from .losses.reg_loss import FCOSLossComputation
 from .losses.utils import bbox_oiou, bbox_overlaps
 from .models.backbone import PatchMerging, ResnetEncoder
-from .models.head import DynamicConv, FCOSHead
-from .models.transformer import (ChannelAttention, LocalFeatureTransformer,
-                                 QueryTransformer, SpatialAttention)
+from .models.transformer import QueryTransformer
 from .models.utils import (PositionEncodingSine, box_tlbr_to_xyxy,
-                           box_xyxy_to_cxywh, compute_locations, delta2bbox)
+                           box_xyxy_to_cxywh)
 
 INF = 1e9
 
@@ -249,6 +246,7 @@ class OETR(nn.Module):
         tlbr1 = self.tlbr_reg(hs1).sigmoid().squeeze(1)
         tlbr2 = self.tlbr_reg(hs2).sigmoid().squeeze(1)
 
+        # Groundtruth
         gt_bbox_xyxy1 = data['overlap_box1'][data['overlap_valid']]
         gt_bbox_xyxy2 = data['overlap_box2'][data['overlap_valid']]
         gt_bbox_cxywh1 = box_xyxy_to_cxywh(gt_bbox_xyxy1,
@@ -258,6 +256,7 @@ class OETR(nn.Module):
                                            max_h=wh_scale2[1],
                                            max_w=wh_scale2[0])
 
+        # Prediction
         pred_bbox_xyxy1 = torch.stack(
             [
                 box_cxy1[:, 0] - tlbr1[:, 1] * wh_scale1[0],
@@ -291,6 +290,7 @@ class OETR(nn.Module):
             dim=-1,
         )
 
+        # Localization loss
         loc_l1_loss = F.l1_loss(
             pred_bbox_cxywh1[:, :2] / wh_scale1,
             gt_bbox_cxywh1[:, :2] / wh_scale1,
@@ -301,6 +301,7 @@ class OETR(nn.Module):
             reduction='mean',
         )
 
+        # Width and height loss
         wh_l1_loss = (F.l1_loss(
             pred_bbox_cxywh1[:, 2:] / wh_scale1,
             gt_bbox_cxywh1[:, 2:] / wh_scale1,
@@ -311,6 +312,7 @@ class OETR(nn.Module):
             reduction='mean',
         )) / 2
 
+        # Custom iou loss
         iouloss = self.iouloss(pred_bbox_xyxy1, gt_bbox_xyxy1, pred_bbox_xyxy2,
                                gt_bbox_xyxy2)
 
@@ -328,6 +330,8 @@ class OETR(nn.Module):
                           pred_bbox_xyxy1).mean()
         oiou2 = bbox_oiou(data['overlap_box2'][data['overlap_valid']],
                           pred_bbox_xyxy2).mean()
+
+        # Using cycle consistency loss
         if self.cycle:
             cycle_loss = self.cycle_loss(
                 data['image1'][data['overlap_valid']],
@@ -377,493 +381,9 @@ class OETR(nn.Module):
             }
 
 
-# Model head is simple FC module
-class OETR_FC(nn.Module):
-    def __init__(self, cfg):
-        super(OETR_FC, self).__init__()
-        self.backbone = ResnetEncoder(cfg)
-        self.loss = IouOverlapLoss(reduction='mean', oiou=cfg.LOSS.OIOU)
-        self.cycle_loss = CycleOverlapLoss()
-        self.pos_encoding = PositionEncodingSine(self.backbone.last_layer // 8,
-                                                 max_shape=cfg.NECK.MAX_SHAPE)
-        self.attn = LocalFeatureTransformer(d_model=self.backbone.last_layer //
-                                            8,
-                                            nhead=8)
-        self.fc_reg = nn.Linear(self.backbone.last_layer // 4, 4)
-
-        self.input_proj = nn.Conv2d(self.backbone.last_layer,
-                                    self.backbone.last_layer // 8,
-                                    kernel_size=1)
-        self.head = DynamicConv(self.backbone.last_layer // 8)
-        self.max_shape = cfg.NECK.MAX_SHAPE
-        self.cycle = cfg.LOSS.CYCLE_OVERLAP
-        # segmentation for decoder sampling
-        self.init_weights()
-
-    def init_weights(self):
-        nn.init.normal_(self.fc_reg.weight, 0, 0.001)
-        nn.init.constant_(self.fc_reg.bias, 0)
-
-    def forward(self, data, validation=False):
-        feat1 = self.input_proj(
-            self.backbone(
-                data['image1'][data['overlap_valid']]))  # 16, 256, 20, 20
-        feat2 = self.input_proj(
-            self.backbone(data['image2'][data['overlap_valid']]))
-        # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
-                            'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
-                            'n c h w -> n (h w) c').contiguous()
-        feat_r1 = rearrange(feat1, 'n c h w -> n (h w) c').contiguous()
-        feat_r2 = rearrange(feat2, 'n c h w -> n (h w) c').contiguous()
-        feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
-
-        # TODO:image1/image2 attention control image2 regression
-        feat_reg1 = self.head(feat_r1.permute(0, 2, 1), feat_a1)
-        feat_reg2 = self.head(feat_r2.permute(0, 2, 1), feat_a2)
-
-        delta_bbox1 = self.fc_reg(feat_reg1)
-        delta_bbox2 = self.fc_reg(feat_reg2)
-
-        box1 = delta2bbox(delta_bbox1, max_shape=data['image1'].shape[1:3])
-        box2 = delta2bbox(delta_bbox2, max_shape=data['image2'].shape[1:3])
-        loss = self.loss(
-            box1,
-            data['overlap_box1'][data['overlap_valid']],
-            box2,
-            data['overlap_box2'][data['overlap_valid']],
-        )
-        if self.cycle:
-            cycle_loss = self.cycle_loss(
-                data['image1'][data['overlap_valid']],
-                data['overlap_box1'][data['overlap_valid']],
-                box1,
-                data['depth1'][data['overlap_valid']],
-                data['intrinsics1'][data['overlap_valid']],
-                data['pose1'][data['overlap_valid']],
-                data['bbox1'][data['overlap_valid']],
-                data['ratio1'][data['overlap_valid']],
-                data['image1'].shape[1:3],
-                data['image2'][data['overlap_valid']],
-                data['overlap_box2'][data['overlap_valid']],
-                box2,
-                data['depth2'][data['overlap_valid']],
-                data['intrinsics2'][data['overlap_valid']],
-                data['pose2'][data['overlap_valid']],
-                data['bbox2'][data['overlap_valid']],
-                data['ratio2'][data['overlap_valid']],
-                data['image2'].shape[1:3],
-                data['file_name'],
-            )
-            iou1 = bbox_overlaps(box1,
-                                 data['overlap_box1'][data['overlap_valid']],
-                                 is_aligned=True).mean()
-            iou2 = bbox_overlaps(box2,
-                                 data['overlap_box2'][data['overlap_valid']],
-                                 is_aligned=True).mean()
-            oiou1 = bbox_oiou(data['overlap_box1'][data['overlap_valid']],
-                              box1).mean()
-            oiou2 = bbox_oiou(data['overlap_box2'][data['overlap_valid']],
-                              box2).mean()
-            return {
-                'pred_bbox1': box1,
-                'pred_bbox2': box2,
-                'loss': loss.mean(),
-                'cycle_loss': cycle_loss.mean(),
-                'iou1': iou1,
-                'iou2': iou2,
-                'oiou1': oiou1,
-                'oiou2': oiou2,
-            }
-        else:
-            return {
-                'pred_bbox1': box1,
-                'pred_bbox2': box2,
-                'loss': loss.mean()
-            }
-
-    # def forward_seg(self, data):
-    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
-    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
-    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
-    #     feat_c1 = rearrange(self.pos_encoding(feat1), 'n c h w -> n (h w) c')
-    #     feat_c2 = rearrange(self.pos_encoding(feat2), 'n c h w -> n (h w) c')
-    #     # self-cross attention for images
-    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
-    #     # reshape channel feature to spatial feature
-    #     feat_c1 = rearrange(feat_c1, 'n (h w) c -> n c h w')
-    #     feat_c2 = rearrange(feat_c2, 'n (h w) c -> n c h w')
-
-    #     feat_c1 = torch.sum(feat_c1, 1) / feat_c1.shape[1]
-    #     feat_c2 = torch.sum(feat_c2, 1) / feat_c2.shape[1]
-    #     feat = torch.cat((feat_c1, feat_c2), dim=1)
-
-    #     bbox_pred = self.fc_reg(feat)
-    #     box1 = delta2bbox(bbox_pred[:, :4], max_shape=self.max_shape)
-    #     box2 = delta2bbox(bbox_pred[:, 4:], max_shape=self.max_shape)
-    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
-    #                     box2, data['overlap_box2'][data['overlap_valid']])
-    #     return {'pred_bbox1': box1,
-    #             'pred_bbox2': box2,
-    #             'loss': loss.mean()}
-
-    # def forward_reg(self, data):
-    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
-    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
-    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
-    #     feat_c1 = rearrange(feat1, 'n c h w -> n (h w) c')
-    #     feat_c2 = rearrange(feat2, 'n c h w -> n (h w) c')
-    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
-
-    #     feat_c1 = torch.sum(feat_c1, 1) / feat_c1.shape[1]
-    #     feat_c2 = torch.sum(feat_c2, 1) / feat_c2.shape[1]
-    #     feat = torch.cat((feat_c1, feat_c2), dim=1)
-
-    #     bbox_pred = self.fc_reg(feat)
-    #     box1 = delta2bbox(bbox_pred[:, :4], max_shape=self.max_shape)
-    #     box2 = delta2bbox(bbox_pred[:, 4:], max_shape=self.max_shape)
-
-    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
-    #                     box2, data['overlap_box2'][data['overlap_valid']])
-    #     return {'pred_bbox1': box1,
-    #             'pred_bbox2': box2,
-    #             'loss': loss.mean()}
-
-    # def forward_match(self, data):
-    #     feat1 = self.input_proj(self.backbone(data['image1'][data['overlap_valid']]))
-    #     feat2 = self.input_proj(self.backbone(data['image2'][data['overlap_valid']]))
-    #     # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
-    #     b,c,h1,w1 = feat1.shape
-    #     b,c,h2,w2 = feat2.shape
-
-    #     feat_c1 = rearrange(self.pos_encoding(feat1), 'n c h w -> n (h w) c')
-    #     feat_c2 = rearrange(self.pos_encoding(feat2), 'n c h w -> n (h w) c')
-    #     feat_c1, feat_c2 = self.attn(feat_c1, feat_c2)
-
-    #     # normalize
-    #     feat_c1, feat_c2 = map(lambda feat: feat / feat.shape[-1]**.5,
-    #                            [feat_c1, feat_c2])
-
-    #     sim_matrix = torch.einsum("nlc,nsc->nls", feat_c1,
-    #                                 feat_c2) / 0.1
-    #     conf_matrix = F.softmax(sim_matrix, 1) * F.softmax(sim_matrix, 2)
-    #     mask = conf_matrix > 0.01
-    #     mask_c1, _ = mask.max(dim=2)
-    #     mask_c1 = mask_c1.reshape(b, h1, w1).int()
-    #     mask_c2, _ = mask.max(dim=1)
-    #     mask_c2 = mask_c2.reshape(b, h2, w2).int()
-
-    #     box1 = mask2bbox(mask_c1, max_shape=self.max_shape)
-    #     box2 = mask2bbox(mask_c2, max_shape=self.max_shape)
-
-    #     loss = self.loss(box1, data['overlap_box1'][data['overlap_valid']],
-    #                     box2, data['overlap_box2'][data['overlap_valid']])
-
-    #     return {'pred_bbox1': box1,
-    #             'pred_bbox2': box2,
-    #             'loss': loss.mean()}
-
-    # inference pipeline
-    def forward_dummy(self, image1, image2):
-        feat1 = self.input_proj(self.backbone(image1))
-        feat2 = self.input_proj(self.backbone(image2))
-        # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
-                            'n c h w -> n (h w) c')
-        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
-                            'n c h w -> n (h w) c')
-        feat_r1 = rearrange(feat1, 'n c h w -> n (h w) c')
-        feat_r2 = rearrange(feat2, 'n c h w -> n (h w) c')
-        feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
-
-        feat_reg1 = self.head(feat_r1.permute(0, 2, 1), feat_a1)
-        feat_reg2 = self.head(feat_r2.permute(0, 2, 1), feat_a2)
-
-        delta_bbox1 = self.fc_reg(feat_reg1)
-        delta_bbox2 = self.fc_reg(feat_reg2)
-
-        box1 = delta2bbox(delta_bbox1, max_shape=image1.shape[1:3])
-        box2 = delta2bbox(delta_bbox2, max_shape=image2.shape[1:3])
-
-        return box1, box2
-
-
-# FCOS regression head
-class OETR_FCOS(nn.Module):
-    def __init__(self, cfg):
-        super(OETR_FCOS, self).__init__()
-        self.backbone = ResnetEncoder(cfg)
-        self.input_proj = nn.Conv2d(self.backbone.last_layer,
-                                    self.backbone.last_layer // 4,
-                                    kernel_size=1)
-
-        self.loss = IouOverlapLoss(reduction='mean', oiou=cfg.LOSS.OIOU)
-        self.cycle_loss = CycleOverlapLoss()
-        self.fcos_loss = FCOSLossComputation(
-            norm_reg_targets=cfg.HEAD.NORM_REG_TARGETS)
-
-        self.pos_encoding = PositionEncodingSine(self.backbone.last_layer // 4,
-                                                 max_shape=cfg.NECK.MAX_SHAPE)
-        self.attn = LocalFeatureTransformer(d_model=self.backbone.last_layer //
-                                            4,
-                                            nhead=4)
-
-        self.ca = ChannelAttention(self.backbone.last_layer // 4)
-        self.sa = SpatialAttention()
-        self.head = FCOSHead(self.backbone.last_layer // 4,
-                             norm_reg_targets=cfg.HEAD.NORM_REG_TARGETS)
-        self.norm_reg_targets = cfg.HEAD.NORM_REG_TARGETS
-        self.max_shape = cfg.NECK.MAX_SHAPE
-        self.cycle = cfg.LOSS.CYCLE_OVERLAP
-
-        self.init_weights()
-
-    def init_weights(self):
-        pass
-
-    def _CBAM(self, feat, param):
-        feat = self.ca(param) * feat
-        feat = self.sa(feat) * feat
-        return feat
-
-    def _bbox_regress(self, feat1, feat2, target1, target2, validation=False):
-        box_cls1, bbox1, centerness1 = self.head(feat1)
-        box_cls2, bbox2, centerness2 = self.head(feat2)
-        locations1 = compute_locations(feat1)
-        locations2 = compute_locations(feat2)
-        if not validation:
-            loss_box_cls1, loss_box_reg1, loss_centerness1 = self.fcos_loss(
-                locations1, box_cls1, bbox1, centerness1, target1)
-            loss_box_cls2, loss_box_reg2, loss_centerness2 = self.fcos_loss(
-                locations2, box_cls2, bbox2, centerness2, target2)
-            loss_box_cls = 0.5 * (loss_box_cls1 + loss_box_cls2)
-            loss_box_reg = 0.5 * (loss_box_reg1 + loss_box_reg2)
-            loss_centerness = 0.5 * (loss_centerness1 + loss_centerness2)
-            return (
-                bbox1,
-                box_cls1,
-                centerness1,
-                locations1,
-                bbox2,
-                box_cls2,
-                centerness2,
-                locations2,
-                loss_box_cls,
-                loss_box_reg,
-                loss_centerness,
-            )
-        else:
-            return (
-                bbox1,
-                box_cls1,
-                centerness1,
-                locations1,
-                bbox2,
-                box_cls2,
-                centerness2,
-                locations2,
-                0,
-                0,
-                0,
-            )
-
-    def fcos_overlap_bbox(
-            self,
-            box_cls,
-            box_regression,
-            centerness,
-            locations,
-            stride=16,
-            image_shape=(640, 640),
-            validation=False,
-    ):
-        N, C, H, W = box_cls.shape
-        box_cls = box_cls.view(N, C, H, W).permute(0, 2, 3, 1)
-        box_cls = box_cls.reshape(N, -1, C).sigmoid()
-        centerness = centerness.view(N, 1, H, W).permute(0, 2, 3, 1)
-        centerness = centerness.reshape(N, -1).sigmoid()
-        box_regression = box_regression.view(N, 4, H, W).permute(0, 2, 3, 1)
-        box_regression = box_regression.reshape(N, -1, 4)
-        # multiply the classification scores with centerness scores
-        box_cls = box_cls * centerness[:, :, None]
-        if self.norm_reg_targets and not validation:
-            box_regression = box_regression * stride
-
-        results = []
-        for i in range(N):
-            per_box_cls = box_cls[i]
-            index = per_box_cls.argmax()
-            per_location = locations[index]
-            per_box_regression = box_regression[i]
-            per_box_regression = per_box_regression[index]
-            detection = torch.tensor([
-                (per_location[0] - per_box_regression[0]).clamp(
-                    min=0, max=image_shape[1]),
-                (per_location[1] - per_box_regression[1]).clamp(
-                    min=0, max=image_shape[0]),
-                (per_location[0] + per_box_regression[2]).clamp(
-                    min=0, max=image_shape[1]),
-                (per_location[1] + per_box_regression[3]).clamp(
-                    min=0, max=image_shape[0]),
-            ])
-            results.append(detection)
-        results = torch.stack(results, dim=0)
-        heatmap = box_cls.view(N, H, W, C)
-        return results, heatmap
-
-    def forward(self, data, validation=False):
-        feat1 = self.input_proj(
-            self.backbone(
-                data['image1'][data['overlap_valid']]))  # 16, 256, 20, 20
-        feat2 = self.input_proj(
-            self.backbone(data['image2'][data['overlap_valid']]))
-        h1, h2 = feat1.shape[2], feat2.shape[2]
-        # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
-                            'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
-                            'n c h w -> n (h w) c').contiguous()
-
-        feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
-        # unfold n,(h,w),c -> n,9*c,h/3,w,3
-        feat_a1 = rearrange(feat_a1, 'n (h w) c -> n c h w', h=h1).contiguous()
-        feat_a2 = rearrange(feat_a2, 'n (h w) c -> n c h w', h=h2).contiguous()
-        # TODO:image1/image2 attention average pooling channel-wise attention
-        feat_reg1 = self._CBAM(feat1, feat_a2)
-        feat_reg2 = self._CBAM(feat2, feat_a1)
-
-        (
-            bbox1,
-            box_cls1,
-            centerness1,
-            locations1,
-            bbox2,
-            box_cls2,
-            centerness2,
-            locations2,
-            loss_box_cls,
-            loss_box_reg,
-            loss_centerness,
-        ) = self._bbox_regress(
-            feat_reg1,
-            feat_reg2,
-            data['overlap_box1'][data['overlap_valid']],
-            data['overlap_box2'][data['overlap_valid']],
-            validation=validation,
-        )
-
-        overlap_bbox1, center1 = self.fcos_overlap_bbox(box_cls1,
-                                                        bbox1,
-                                                        centerness1,
-                                                        locations1,
-                                                        validation=validation)
-        overlap_bbox2, center2 = self.fcos_overlap_bbox(box_cls2,
-                                                        bbox2,
-                                                        centerness2,
-                                                        locations2,
-                                                        validation=validation)
-        if self.cycle:
-            cycle_loss = self.cycle_loss(
-                data['image1'][data['overlap_valid']],
-                data['overlap_box1'][data['overlap_valid']],
-                overlap_bbox1,
-                data['depth1'][data['overlap_valid']],
-                data['intrinsics1'][data['overlap_valid']],
-                data['pose1'][data['overlap_valid']],
-                data['bbox1'][data['overlap_valid']],
-                data['ratio1'][data['overlap_valid']],
-                data['image1'].shape[1:3],
-                data['image2'][data['overlap_valid']],
-                data['overlap_box2'][data['overlap_valid']],
-                overlap_bbox2,
-                data['depth2'][data['overlap_valid']],
-                data['intrinsics2'][data['overlap_valid']],
-                data['pose2'][data['overlap_valid']],
-                data['bbox2'][data['overlap_valid']],
-                data['ratio2'][data['overlap_valid']],
-                data['image2'].shape[1:3],
-                data['file_name'],
-            )
-            return {
-                'pred_bbox1': overlap_bbox1,
-                'pred_center1': center1,
-                'pred_bbox2': overlap_bbox2,
-                'pred_center2': center2,
-                'loss_box_cls': loss_box_cls,
-                'loss_box_reg': loss_box_reg,
-                'loss_centerness': loss_centerness,
-                'cycle_loss': cycle_loss.mean(),
-            }
-        else:
-            return {
-                'pred_bbox1': overlap_bbox1,
-                'pred_center1': center1,
-                'pred_bbox2': overlap_bbox2,
-                'pred_center2': center2,
-                'loss_box_cls': loss_box_cls,
-                'loss_box_reg': loss_box_reg,
-                'loss_centerness': loss_centerness,
-            }
-
-    def forward_dummy(self, data):
-        feat1 = self.input_proj(
-            self.backbone(
-                data['image1'][data['overlap_valid']]))  # 16, 256, 20, 20
-        feat2 = self.input_proj(
-            self.backbone(data['image2'][data['overlap_valid']]))
-        h1, h2 = feat1.shape[2], feat2.shape[2]
-        # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
-                            'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
-                            'n c h w -> n (h w) c').contiguous()
-
-        feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
-        # unfold n,(h,w),c -> n,9*c,h/3,w,3
-        feat_a1 = rearrange(feat_a1, 'n (h w) c -> n c h w', h=h1).contiguous()
-        feat_a2 = rearrange(feat_a2, 'n (h w) c -> n c h w', h=h2).contiguous()
-        # TODO:image1/image2 attention average pooling channel-wise attention
-        feat_reg1 = self._CBAM(feat1, feat_a2)
-        feat_reg2 = self._CBAM(feat2, feat_a1)
-
-        (
-            bbox1,
-            box_cls1,
-            centerness1,
-            locations1,
-            bbox2,
-            box_cls2,
-            centerness2,
-            locations2,
-        ) = self._bbox_regress(
-            feat_reg1,
-            feat_reg2,
-            data['overlap_box1'][data['overlap_valid']],
-            data['overlap_box2'][data['overlap_valid']],
-            training=False,
-        )
-
-        overlap_bbox1, center1 = self.fcos_overlap_bbox(
-            box_cls1, bbox1, centerness1, locations1)
-        overlap_bbox2, center2 = self.fcos_overlap_bbox(
-            box_cls2, bbox2, centerness2, locations2)
-
-        return {
-            'pred_bbox1': overlap_bbox1,
-            'pred_center1': center1,
-            'pred_bbox2': overlap_bbox2,
-            'pred_center2': center2,
-        }
-
-
 # build model with different configuration
 def build_detectors(cfg):
     if cfg.MODEL == 'oetr':
         return OETR(cfg)
-    elif cfg.MODEL == 'oetr_fc':
-        return OETR_FC(cfg)
-    elif cfg.MODEL == 'oetr_fcos':
-        return OETR_FCOS(cfg)
     else:
         raise ValueError(f'OETR.MODEL {cfg.MODEL} not supported.')

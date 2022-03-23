@@ -216,7 +216,11 @@ def crop(image1, image2, central_match, image_size):
     )
 
 
-def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
+def recover_pair(base_path,
+                 image_size,
+                 pair_metadata,
+                 with_mask=False,
+                 with_gray=False):
     """calculate image pairs information from metadata.
 
     Args:
@@ -227,8 +231,11 @@ def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
         depth1 = np.array(hdf5_file['/depth'])
     assert np.min(depth1) >= 0
     image_path1 = os.path.join(base_path, pair_metadata['image_path1'])
-    gray1 = cv2.imread(image_path1, cv2.IMREAD_GRAYSCALE)
-    assert gray1.shape[0] == depth1.shape[0] and gray1.shape[
+    if with_gray:
+        image1 = cv2.imread(image_path1, cv2.IMREAD_GRAYSCALE)
+    else:
+        image1 = cv2.imread(image_path1)
+    assert image1.shape[0] == depth1.shape[0] and image1.shape[
         1] == depth1.shape[1]
     intrinsics1 = pair_metadata['intrinsics1']
     pose1 = pair_metadata['pose1']
@@ -238,18 +245,23 @@ def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
         depth2 = np.array(hdf5_file['/depth'])
     assert np.min(depth2) >= 0
     image_path2 = os.path.join(base_path, pair_metadata['image_path2'])
-    gray2 = cv2.imread(image_path2, cv2.IMREAD_GRAYSCALE)
-    assert gray2.shape[0] == depth2.shape[0] and gray2.shape[
+    if with_gray:
+        image2 = cv2.imread(image_path2, cv2.IMREAD_GRAYSCALE)
+    else:
+        image2 = cv2.imread(image_path2)
+    assert image2.shape[0] == depth2.shape[0] and image2.shape[
         1] == depth2.shape[1]
     intrinsics2 = pair_metadata['intrinsics2']
     pose2 = pair_metadata['pose2']
 
-    gray1, resize_ratio1 = resize_dataset(gray1, image_size)
-    gray2, resize_ratio2 = resize_dataset(gray2, image_size)
+    # Resize data
+    image1, resize_ratio1 = resize_dataset(image1, image_size)
+    image2, resize_ratio2 = resize_dataset(image2, image_size)
 
     central_match = pair_metadata['central_match'] * np.concatenate(
         (resize_ratio1, resize_ratio2))
-    gray1, bbox1, gray2, bbox2 = crop(gray1, gray2, central_match, image_size)
+    image1, bbox1, image2, bbox2 = crop(image1, image2, central_match,
+                                        image_size)
 
     depth1, _ = resize_dataset(depth1, image_size, True)
     depth2, _ = resize_dataset(depth2, image_size, True)
@@ -286,7 +298,7 @@ def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
                        pair_metadata['image_path2'].split('/')[-1])
 
     return (
-        gray1,
+        image1,
         depth1,
         intrinsics1,
         pose1,
@@ -294,7 +306,7 @@ def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
         resize_ratio1,
         bbox1,
         mask1,
-        gray2,
+        image2,
         depth2,
         intrinsics2,
         pose2,
@@ -307,6 +319,7 @@ def recover_pair(base_path, image_size, pair_metadata, with_mask=False):
     )
 
 
+# print image width and height
 def statistics_image_pairs(pairs_list_path, dataset_path):
     with open(pairs_list_path, 'r') as f:
         for line in f.readlines():

@@ -15,8 +15,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from src.datasets.utils import (numpy_overlap_box, recover_pair, visualize_box,
-                                visualize_mask)
+from src.datasets.utils import numpy_overlap_box, recover_pair, visualize_mask
 
 
 class MegaDepthPairsDataset(Dataset):
@@ -257,53 +256,6 @@ def main(pairs_list_path, dataset_path, batch_size, num_workers, local_rank=0):
         base_path=dataset_path,
         train=False,
         preprocessing=None,
-        pairs_per_scene=25,
-    )
-    dataset.build_dataset()
-    dataloader = torch.utils.data.DataLoader(dataset,
-                                             batch_size=batch_size,
-                                             num_workers=num_workers,
-                                             shuffle=False)
-    for i, batch in enumerate(dataloader):
-        if i % 10 != 0:
-            continue
-        box1, valid_uv1, box2, valid_uv2 = dataset.overlap_box(
-            batch['intrinsics1'][0],
-            batch['depth1'][0],
-            batch['pose1'][0],
-            batch['bbox1'][0],
-            batch['ratio1'][0],
-            batch['intrinsics2'][0],
-            batch['depth2'][0],
-            batch['pose2'][0],
-            batch['bbox2'][0],
-            batch['ratio2'][0],
-        )
-
-        visualize_box(
-            batch['image1'][0] * 255,
-            box1,
-            valid_uv1,
-            batch['depth1'][0],
-            batch['image2'][0] * 255,
-            box2,
-            valid_uv2,
-            batch['depth2'][0],
-            batch['file_name'][0],
-        )
-
-
-def main_overlap(pairs_list_path,
-                 dataset_path,
-                 batch_size,
-                 num_workers,
-                 local_rank=0):
-    dataset = MegaDepthPairsDataset(
-        pairs_list_path=pairs_list_path,
-        scene_info_path=os.path.join(dataset_path, 'scene_info'),
-        base_path=dataset_path,
-        train=False,
-        preprocessing=None,
         pairs_per_scene=100,
     )
     dataset.build_dataset()
@@ -314,6 +266,7 @@ def main_overlap(pairs_list_path,
     for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
         if i % 10:
             continue
+        # Visualization datasets
         visualize_mask(
             batch['image1'][0] * 255,
             batch['overlap_box1'][0],
@@ -354,4 +307,4 @@ if __name__ == '__main__':
                         help='node rank for distributed training')
     args = parser.parse_args()
 
-    main_overlap(**args.__dict__)
+    main(**args.__dict__)
