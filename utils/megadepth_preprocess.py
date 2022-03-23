@@ -67,6 +67,14 @@ def overlap_box(K1, depth1, pose1, K2, depth2, pose2):
 
 
 def scale_diff(bbox0, bbox1, depth0, depth1):
+    """Calculate the max scale difference in width and height.
+
+    Args:
+        bbox0 (np.array): co-visible area bounding box in image0
+        bbox1 (np.array): co-visible area bounding box in image1
+    Returns:
+        scale_dirff(float): the max difference in width and height
+    """
     w_diff = max((bbox0[2] - bbox0[0]) / (bbox1[2] - bbox1[0]),
                  (bbox1[2] - bbox1[0]) / (bbox0[2] - bbox0[0]))
     h_diff = max((bbox0[3] - bbox0[1]) / (bbox1[3] - bbox1[1]),
@@ -102,6 +110,20 @@ def process_scene(scene,
                   min_overlap_ratio=0.1,
                   max_overlap_ratio=0.7,
                   max_scale_ratio=100):
+    """Preprocess scene to txt to accelerate training.
+
+    Args:
+        scene (str): scene id in megadepth
+        datasets (str): path of megadepth dataset
+        pairs_per_scene (int, optional): extract the number of image pairs from the data. Defaults to 3000.
+        existed_pairs (list, optional): extracted pairs. Defaults to [].
+        min_overlap_ratio (float, optional): min overlap ratio. Defaults to 0.1.
+        max_overlap_ratio (float, optional): max overlap ratio. Defaults to 0.7.
+        max_scale_ratio (int, optional): max scale difference ratio. Defaults to 100.
+
+    Returns:
+        str: all pairs information
+    """
     data = ''
     scene_info_path = os.path.join(datasets, 'scene_info/%s.0.npz' % scene)
     pairs_repeate = existed_pairs

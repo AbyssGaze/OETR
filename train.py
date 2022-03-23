@@ -25,32 +25,42 @@ from utils.utils import (get_logger, loss_info,
 from utils.validation import evaluate
 
 # os.environ["OMP_NUM_THREADS"] = "1"
-seed = 42
+# seed = 42
 
 
-def main(opt):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(opt.config_path)
+def setup_seed(seed):
+    """set random seed to protect the trainning results.
+
+    Args:
+        seed (int): random seed
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
 
+
+def main(opt):
+    cfg = get_cfg_defaults()
+    cfg.merge_from_file(opt.config_path)
+    setup_seed(opt.seed)
+    # output folder init
     timestamp = datetime.datetime.now().strftime('%m-%d-%H:%M')
     if opt.debug:
-        opt.save_path = Path(f'./OUTPUT/SADNet/debug/{cfg.OUTPUT}' + timestamp)
+        opt.save_path = Path(f'./OUTPUT/OETR/debug/{cfg.OUTPUT}' + timestamp)
     else:
-        opt.save_path = Path(f'./OUTPUT/SADNet/checkpoints/{cfg.OUTPUT}/' +
+        opt.save_path = Path(f'./OUTPUT/OETR/checkpoints/{cfg.OUTPUT}/' +
                              timestamp)
 
     opt.save_path.mkdir(exist_ok=True, parents=True)
+    # pytorch init
     torch.cuda.set_device(opt.local_rank)
     torch.distributed.init_process_group('nccl', init_method='env://')
-
     device = torch.device(f'cuda:{opt.local_rank}') if torch.cuda.is_available(
     ) else torch.device('cpu')
 
+    # build dataloader and detectors
     training_dataset = build_dataloader(cfg.DATASET.TRAIN,
                                         cfg.DATASET.DATA_ROOT)
     model = build_detectors(cfg.SADNET).to(device)
@@ -77,12 +87,7 @@ def main(opt):
     if opt.validation:
         validation_dataset = build_dataloader(cfg.DATASET.VAL,
                                               cfg.DATASET.DATA_ROOT)
-        if cfg.DATASET.VAL.DATA_SOURCE == 'megadepth_ms':
-            validation_dataset.build_dataset(cfg.DATASET.VAL.SCALES[0],
-                                             cfg.DATASET.VAL.SCALES[1],
-                                             cfg.SADNET.BACKBONE.STRIDE)
-        else:
-            validation_dataset.build_dataset()
+        validation_dataset.build_dataset()
         validation_dataloader = torch.utils.data.DataLoader(
             validation_dataset,
             batch_size=opt.batch_size,
@@ -93,15 +98,7 @@ def main(opt):
     # start training
     for epoch in range(opt.epoch):
         model.float().train()
-
-        if cfg.DATASET.TRAIN.DATA_SOURCE == 'megadepth_ms':
-            scales = random.sample(cfg.DATASET.TRAIN.SCALES, 2)
-            training_dataset.build_dataset(scales[0], scales[1],
-                                           cfg.SADNET.BACKBONE.STRIDE)
-            if opt.local_rank == 0:
-                logger.info(scales)
-        else:
-            training_dataset.build_dataset()
+        training_dataset.build_dataset()
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             training_dataset)
@@ -121,6 +118,7 @@ def main(opt):
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
+            # save info and visualization
             if opt.local_rank == 0 and i % 50 == 0:
                 info = loss_info(data, writer,
                                  i + epoch * len(training_dataloader))
@@ -158,6 +156,7 @@ def main(opt):
                             batch['image1'][0].cpu().numpy() * 255, bbox1,
                             gt_bbox1, batch['image2'][0].cpu().numpy() * 255,
                             bbox2, gt_bbox2, viz_name)
+        # validation results
         if opt.local_rank == 0 and opt.validation:
             model.eval()
             evaluate(model,
@@ -168,7 +167,6 @@ def main(opt):
                      epoch=epoch,
                      oiou=cfg.DATASET.VAL.OIOU,
                      viz=cfg.DATASET.VAL.VIZ)
-
         scheduler.step()
 
         if opt.local_rank == 0:
@@ -210,6 +208,7 @@ if __name__ == '__main__':
                         type=int,
                         default=30,
                         help='Number of epoches')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
     args = parser.parse_args()
 
     main(args)

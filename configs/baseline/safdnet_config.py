@@ -1,5 +1,6 @@
 from src.config.default import _CN as cfg
 
+# model name
 cfg.OUTPUT = 'safdnet'
 
 cfg.DATASET.DATA_ROOT = '/youtu/xlab-team4/AbyssGaze/megadepth/'

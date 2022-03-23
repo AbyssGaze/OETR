@@ -8,25 +8,11 @@
 '''
 import os
 
-from .megadepth import MegaDepthDataset
-from .megadepth_ms import MegaDepthMultiScaleDataset
 from .megadepth_pairs import MegaDepthPairsDataset
-from .megadepth_resize import MegaDepthPairsResizeDataset
 
 
 def build_dataloader(cfg, dataset_path):
-    if cfg.DATA_SOURCE == 'megadepth':
-        dataset = MegaDepthDataset(scene_list_path=cfg.LIST_PATH,
-                                   scene_info_path=os.path.join(
-                                       dataset_path, 'scene_info'),
-                                   base_path=dataset_path,
-                                   preprocessing=None,
-                                   pairs_per_scene=cfg.PAIRS_LENGTH,
-                                   with_mask=cfg.WITH_MASK,
-                                   train=cfg.TRAIN,
-                                   image_size=cfg.IMAGE_SIZE)
-        return dataset
-    elif cfg.DATA_SOURCE == 'megadepth_pairs':
+    if cfg.DATA_SOURCE == 'megadepth_pairs':
         dataset = MegaDepthPairsDataset(pairs_list_path=cfg.LIST_PATH,
                                         scene_info_path=os.path.join(
                                             dataset_path, 'scene_info'),
@@ -36,27 +22,6 @@ def build_dataloader(cfg, dataset_path):
                                         with_mask=cfg.WITH_MASK,
                                         train=cfg.TRAIN,
                                         image_size=cfg.IMAGE_SIZE)
-        return dataset
-    elif cfg.DATA_SOURCE == 'megadepth_resize':
-        dataset = MegaDepthPairsResizeDataset(pairs_list_path=cfg.LIST_PATH,
-                                              scene_info_path=os.path.join(
-                                                  dataset_path, 'scene_info'),
-                                              base_path=dataset_path,
-                                              preprocessing=None,
-                                              pairs_per_scene=cfg.PAIRS_LENGTH,
-                                              with_mask=cfg.WITH_MASK,
-                                              train=cfg.TRAIN,
-                                              image_size=cfg.IMAGE_SIZE)
-        return dataset
-    elif cfg.DATA_SOURCE == 'megadepth_ms':
-        dataset = MegaDepthMultiScaleDataset(pairs_list_path=cfg.LIST_PATH,
-                                             scene_info_path=os.path.join(
-                                                 dataset_path, 'scene_info'),
-                                             base_path=dataset_path,
-                                             preprocessing=None,
-                                             pairs_per_scene=cfg.PAIRS_LENGTH,
-                                             with_mask=cfg.WITH_MASK,
-                                             train=cfg.TRAIN)
         return dataset
     else:
         raise ValueError(f'DATASET {cfg.DATA_SOURCE} not supported.')
