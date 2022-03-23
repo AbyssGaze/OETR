@@ -118,7 +118,7 @@ def evaluate_dummy(model,
                    oiou=False,
                    viz=False):
     ious = []
-    for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+    for _, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
         image1, image2 = batch['image1'].cuda(), batch['image2'].cuda()
         pred_bbox1, pred_bbox2 = model.forward_dummy(image1, image2)
         if not oiou:
@@ -132,7 +132,7 @@ def evaluate_dummy(model,
             ious1 = bbox_oiou(batch['overlap_box1'], pred_bbox1.cpu())
             ious2 = bbox_oiou(batch['overlap_box2'], pred_bbox2.cpu())
         ious += list(ious1.numpy()) + list(ious2.numpy())
-        if True:
+        if viz:
             bbox1 = pred_bbox1[0].cpu().numpy().astype(int)
             bbox2 = pred_bbox2[0].cpu().numpy().astype(int)
             gt_bbox1 = batch['overlap_box1'][0].numpy().astype(int)
