@@ -16,7 +16,7 @@ from timm.models.layers import to_2tuple
 
 
 class PatchMerging(nn.Module):
-    r""" Patch Merging Layer.
+    """Patch Merging Layer.
 
     Args:
         input_resolution (tuple[int]): Resolution of input feature.
@@ -28,8 +28,7 @@ class PatchMerging(nn.Module):
                  input_resolution,
                  dim,
                  norm_layer=nn.LayerNorm,
-                 patch_size=[2],
-                 num_input_patch_size=1):
+                 patch_size=[2]):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
@@ -69,7 +68,7 @@ class PatchMerging(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    r""" Image to Patch Embedding
+    """Image to Patch Embedding.
 
     Args:
         img_size (int): Image size.  Default: 224.

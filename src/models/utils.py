@@ -121,11 +121,11 @@ def delta2bbox(deltas,
     y1 = gy - gh * 0.5
     x2 = gx + gw * 0.5
     y2 = gy + gh * 0.5
-    if max_shape is not None:
-        x1 = x1.clamp(min=0, max=max_shape[1])
-        y1 = y1.clamp(min=0, max=max_shape[0])
-        x2 = x2.clamp(min=0, max=max_shape[1])
-        y2 = y2.clamp(min=0, max=max_shape[0])
+
+    x1 = x1.clamp(min=0, max=max_shape[1])
+    y1 = y1.clamp(min=0, max=max_shape[0])
+    x2 = x2.clamp(min=0, max=max_shape[1])
+    y2 = y2.clamp(min=0, max=max_shape[0])
     bboxes = torch.stack([x1, y1, x2, y2], dim=-1).view_as(deltas)
     return bboxes
 

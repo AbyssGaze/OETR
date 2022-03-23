@@ -7,7 +7,7 @@ _CN.OUTPUT = ''
 _CN.SADNET = CN()
 _CN.SADNET.CHECKPOINT = None
 _CN.SADNET.BACKBONE_TYPE = 'ResNet'
-_CN.SADNET.MODEL = 'safdnet'  # options:['sacdnet', 'safdnet']
+_CN.SADNET.MODEL = 'oetr'  # options:['oetr', 'oetr_fc', 'oetr_fcos']
 _CN.SADNET.NORM_INPUT = True
 
 # 1. SADNET-backbone (local feature CNN) config
@@ -23,7 +23,9 @@ _CN.SADNET.NECK.D_MODEL = 256
 _CN.SADNET.NECK.LAYER_NAMES = ['self', 'cross'] * 4
 _CN.SADNET.NECK.ATTENTION = 'linear'  # options: ['linear', 'full']
 _CN.SADNET.NECK.MAX_SHAPE = (
-    100, 100)  # max feature map shape, with image shape: max_shape*stride
+    100,
+    100,
+)  # max feature map shape, with image shape: max_shape*stride
 
 # 3. SADNET-neck module config
 _CN.SADNET.HEAD = CN()
