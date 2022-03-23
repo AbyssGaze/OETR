@@ -778,4 +778,4 @@ def build_detectors(cfg):
     elif cfg.MODEL == 'oetr_fcos':
         return OETR_FCOS(cfg)
     else:
-        raise ValueError(f'SADNET.MODEL {cfg.MODEL} not supported.')
+        raise ValueError(f'OETR.MODEL {cfg.MODEL} not supported.')

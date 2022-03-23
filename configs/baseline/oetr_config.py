@@ -4,15 +4,15 @@ cfg.OUTPUT = 'oetr_mf'
 
 cfg.DATASET.DATA_ROOT = './dataset/megadepth/'
 
-cfg.SADNET.MODEL = 'oetr'
-cfg.SADNET.NORM_INPUT = True
-cfg.SADNET.CHECKPOINT = None
+cfg.OETR.MODEL = 'oetr'
+cfg.OETR.NORM_INPUT = True
+cfg.OETR.CHECKPOINT = None
 
-# 1. SADNET-backbone (local feature CNN) config
-cfg.SADNET.BACKBONE.NUM_LAYERS = 50
-cfg.SADNET.BACKBONE.STRIDE = 32
-cfg.SADNET.BACKBONE.LAYER = 'layer3'  # options: ['layer4']
-cfg.SADNET.BACKBONE.LAST_LAYER = 1024  # output last channel size
+# 1. OETR-backbone (local feature CNN) config
+cfg.OETR.BACKBONE.NUM_LAYERS = 50
+cfg.OETR.BACKBONE.STRIDE = 32
+cfg.OETR.BACKBONE.LAYER = 'layer3'  # options: ['layer4']
+cfg.OETR.BACKBONE.LAST_LAYER = 1024  # output last channel size
 
 cfg.DATASET.TRAIN.DATA_SOURCE = 'megadepth_pairs'
 cfg.DATASET.TRAIN.LIST_PATH = './dataset/megadepth/assets/megadepth_train_pairs.txt'
@@ -26,5 +26,5 @@ cfg.DATASET.VAL.PAIRS_LENGTH = None
 cfg.DATASET.VAL.IMAGE_SIZE = [640, 640]
 cfg.DATASET.VAL.SCALES = [[1200, 1200], [1200, 1200]]
 
-cfg.SADNET.LOSS.OIOU = False
-cfg.SADNET.LOSS.CYCLE_OVERLAP = True
+cfg.OETR.LOSS.OIOU = False
+cfg.OETR.LOSS.CYCLE_OVERLAP = True

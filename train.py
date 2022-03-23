@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   train.py
 @Time    :   2021/06/29 17:19:36
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 
 import argparse
 import datetime
@@ -57,17 +57,17 @@ def main(opt):
     # pytorch init
     torch.cuda.set_device(opt.local_rank)
     torch.distributed.init_process_group('nccl', init_method='env://')
-    device = torch.device(f'cuda:{opt.local_rank}') if torch.cuda.is_available(
-    ) else torch.device('cpu')
+    device = (torch.device(f'cuda:{opt.local_rank}')
+              if torch.cuda.is_available() else torch.device('cpu'))
 
     # build dataloader and detectors
     training_dataset = build_dataloader(cfg.DATASET.TRAIN,
                                         cfg.DATASET.DATA_ROOT)
-    model = build_detectors(cfg.SADNET).to(device)
+    model = build_detectors(cfg.OETR).to(device)
 
-    if cfg.SADNET.CHECKPOINT:
+    if cfg.OETR.CHECKPOINT:
         model.load_state_dict(
-            torch.load(cfg.SADNET.CHECKPOINT, map_location='cpu'))
+            torch.load(cfg.OETR.CHECKPOINT, map_location='cpu'))
 
     model = torch.nn.parallel.DistributedDataParallel(
         model, device_ids=[opt.local_rank], find_unused_parameters=True)
@@ -109,7 +109,8 @@ def main(opt):
             num_workers=opt.num_workers,
             pin_memory=True,
             drop_last=True,
-            sampler=train_sampler)
+            sampler=train_sampler,
+        )
 
         for i, batch in enumerate(training_dataloader):
             data = model(batch)
@@ -125,8 +126,13 @@ def main(opt):
 
                 logger.info(
                     'Epoch [{}][{}/{}], lr: {:E}, loss: {:.5f}, {}'.format(
-                        epoch, i, len(training_dataloader),
-                        scheduler.get_last_lr()[0], loss, info))
+                        epoch,
+                        i,
+                        len(training_dataloader),
+                        scheduler.get_last_lr()[0],
+                        loss,
+                        info,
+                    ))
 
                 writer.add_scalar('Loss/train', loss.item(),
                                   i + epoch * len(training_dataloader))
@@ -140,33 +146,45 @@ def main(opt):
                     gt_bbox2 = batch['overlap_box2'][0].cpu().numpy().astype(
                         int)
                     viz_name = os.path.join(
-                        str(opt.save_path), 'train_{}_{}_'.format(epoch, i) +
-                        batch['file_name'][0])
+                        str(opt.save_path),
+                        'train_{}_{}_'.format(epoch, i) +
+                        batch['file_name'][0],
+                    )
                     if 'pred_center1' in data.keys():
                         visualize_centerness_overlap_gt(
-                            batch['image1'][0].cpu().numpy() * 255, bbox1,
+                            batch['image1'][0].cpu().numpy() * 255,
+                            bbox1,
                             gt_bbox1,
                             data['pred_center1'][0].detach().cpu().numpy(),
-                            batch['image2'][0].cpu().numpy() * 255, bbox2,
+                            batch['image2'][0].cpu().numpy() * 255,
+                            bbox2,
                             gt_bbox2,
                             data['pred_center2'][0].detach().cpu().numpy(),
-                            viz_name)
+                            viz_name,
+                        )
                     else:
                         visualize_overlap_gt(
-                            batch['image1'][0].cpu().numpy() * 255, bbox1,
-                            gt_bbox1, batch['image2'][0].cpu().numpy() * 255,
-                            bbox2, gt_bbox2, viz_name)
+                            batch['image1'][0].cpu().numpy() * 255,
+                            bbox1,
+                            gt_bbox1,
+                            batch['image2'][0].cpu().numpy() * 255,
+                            bbox2,
+                            gt_bbox2,
+                            viz_name,
+                        )
         # validation results
         if opt.local_rank == 0 and opt.validation:
             model.eval()
-            evaluate(model,
-                     validation_dataloader,
-                     logger,
-                     opt.save_path,
-                     iou_thrs=np.arange(0.5, 0.96, 0.05),
-                     epoch=epoch,
-                     oiou=cfg.DATASET.VAL.OIOU,
-                     viz=cfg.DATASET.VAL.VIZ)
+            evaluate(
+                model,
+                validation_dataloader,
+                logger,
+                opt.save_path,
+                iou_thrs=np.arange(0.5, 0.96, 0.05),
+                epoch=epoch,
+                oiou=cfg.DATASET.VAL.OIOU,
+                viz=cfg.DATASET.VAL.VIZ,
+            )
         scheduler.step()
 
         if opt.local_rank == 0:
@@ -178,12 +196,15 @@ def main(opt):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate megadepth image pairs',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    parser.add_argument('--config_path',
-                        type=str,
-                        default='assets/megadepth/config.py',
-                        help='configs of trainning')
+    parser.add_argument(
+        '--config_path',
+        type=str,
+        default='assets/megadepth/config.py',
+        help='configs of trainning',
+    )
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
     parser.add_argument('--num_workers',
                         type=int,

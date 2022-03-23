@@ -3,43 +3,43 @@ from yacs.config import CfgNode as CN
 _CN = CN()
 _CN.OUTPUT = ''
 
-# SADNET Pipeline
-_CN.SADNET = CN()
-_CN.SADNET.CHECKPOINT = None
-_CN.SADNET.BACKBONE_TYPE = 'ResNet'
-_CN.SADNET.MODEL = 'oetr'  # options:['oetr', 'oetr_fc', 'oetr_fcos']
-_CN.SADNET.NORM_INPUT = True
+# OETR Pipeline
+_CN.OETR = CN()
+_CN.OETR.CHECKPOINT = None
+_CN.OETR.BACKBONE_TYPE = 'ResNet'
+_CN.OETR.MODEL = 'oetr'  # options:['oetr', 'oetr_fc', 'oetr_fcos']
+_CN.OETR.NORM_INPUT = True
 
-# 1. SADNET-backbone (local feature CNN) config
-_CN.SADNET.BACKBONE = CN()
-_CN.SADNET.BACKBONE.NUM_LAYERS = 50
-_CN.SADNET.BACKBONE.STRIDE = 16
-_CN.SADNET.BACKBONE.LAYER = 'layer3'  # options: ['layer4']
-_CN.SADNET.BACKBONE.LAST_LAYER = 1024  # output last channel size
+# 1. OETR-backbone (local feature CNN) config
+_CN.OETR.BACKBONE = CN()
+_CN.OETR.BACKBONE.NUM_LAYERS = 50
+_CN.OETR.BACKBONE.STRIDE = 16
+_CN.OETR.BACKBONE.LAYER = 'layer3'  # options: ['layer4']
+_CN.OETR.BACKBONE.LAST_LAYER = 1024  # output last channel size
 
-# 2. SADNET-neck module config
-_CN.SADNET.NECK = CN()
-_CN.SADNET.NECK.D_MODEL = 256
-_CN.SADNET.NECK.LAYER_NAMES = ['self', 'cross'] * 4
-_CN.SADNET.NECK.ATTENTION = 'linear'  # options: ['linear', 'full']
-_CN.SADNET.NECK.MAX_SHAPE = (
+# 2. OETR-neck module config
+_CN.OETR.NECK = CN()
+_CN.OETR.NECK.D_MODEL = 256
+_CN.OETR.NECK.LAYER_NAMES = ['self', 'cross'] * 4
+_CN.OETR.NECK.ATTENTION = 'linear'  # options: ['linear', 'full']
+_CN.OETR.NECK.MAX_SHAPE = (
     100,
     100,
 )  # max feature map shape, with image shape: max_shape*stride
 
-# 3. SADNET-neck module config
-_CN.SADNET.HEAD = CN()
-_CN.SADNET.HEAD.D_MODEL = 256
-_CN.SADNET.HEAD.NORM_REG_TARGETS = True
+# 3. OETR-neck module config
+_CN.OETR.HEAD = CN()
+_CN.OETR.HEAD.D_MODEL = 256
+_CN.OETR.HEAD.NORM_REG_TARGETS = True
 
-# 4. SADNET-fine module config
-_CN.SADNET.LOSS = CN()
-_CN.SADNET.LOSS.OIOU = False
-_CN.SADNET.LOSS.CYCLE_OVERLAP = False
-_CN.SADNET.LOSS.FOCAL_ALPHA = 0.25
-_CN.SADNET.LOSS.FOCAL_GAMMA = 2.0
-_CN.SADNET.LOSS.REG_WEIGHT = 1.0
-_CN.SADNET.LOSS.CENTERNESS_WEIGHT = 1.0
+# 4. OETR-fine module config
+_CN.OETR.LOSS = CN()
+_CN.OETR.LOSS.OIOU = False
+_CN.OETR.LOSS.CYCLE_OVERLAP = False
+_CN.OETR.LOSS.FOCAL_ALPHA = 0.25
+_CN.OETR.LOSS.FOCAL_GAMMA = 2.0
+_CN.OETR.LOSS.REG_WEIGHT = 1.0
+_CN.OETR.LOSS.CENTERNESS_WEIGHT = 1.0
 
 # Dataset
 _CN.DATASET = CN()

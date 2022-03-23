@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   train.py
 @Time    :   2021/06/29 17:19:36
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 import argparse
 import os
 from pathlib import Path
@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from src.config.default import get_cfg_defaults
 from src.datasets.megadepth import MegaDepthDataset
-from src.datasets.megadepth_scale import MegaDepthScaleDataset
-from src.model import SACDModel, SADModel
+from src.model import OETR
 from utils.validation import evaluate_dummy
 
 torch.set_grad_enabled(False)
@@ -23,7 +23,9 @@ torch.set_grad_enabled(False)
 
 def main(opt):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SADModel(opt.num_layers).eval().to(device)
+    cfg = get_cfg_defaults()
+    cfg.merge_from_file(opt.config_path)
+    model = OETR(cfg.OETR).eval().to(device)
     model.load_state_dict(torch.load(opt.checkpoint))
     validation_dataset = MegaDepthDataset(
         scene_list_path='assets/{}validation_scenes.txt'.format(
@@ -43,76 +45,52 @@ def main(opt):
         shuffle=False,
     )
 
-    evaluate_dummy(model,
-                   validation_dataloader,
-                   None,
-                   opt.save_path,
-                   iou_thrs=np.arange(0.5, 0.96, 0.05),
-                   oiou=opt.oiou)
-
-
-def main_scale(opt):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SACDModel(opt.num_layers).eval().to(device)
-    validation_dataset = MegaDepthScaleDataset(
-        pairs_list_path=opt.input_pairs,
-        scene_info_path=os.path.join(opt.dataset_path, 'scene_info'),
-        base_path=opt.dataset_path,
-        train=False,
-        preprocessing=None,
-        pairs_per_scene=1600,
+    evaluate_dummy(
+        model,
+        validation_dataloader,
+        None,
+        opt.save_path,
+        iou_thrs=np.arange(0.5, 0.96, 0.05),
+        oiou=opt.oiou,
     )
-    validation_dataset.build_dataset()
-    validation_dataloader = torch.utils.data.DataLoader(
-        validation_dataset,
-        batch_size=opt.batch_size,
-        num_workers=opt.num_workers,
-        shuffle=False,
-        pin_memory=True)
-    if os.path.isdir(opt.checkpoint):
-        checkpoint_files = os.listdir(opt.checkpoint)
-        for f in checkpoint_files:
-            if f[-3:] == 'pth':
-                model.load_state_dict(
-                    torch.load(os.path.join(opt.checkpoint, f),
-                               map_location='cpu'))
-                evaluate_dummy(model,
-                               validation_dataloader,
-                               None,
-                               opt.save_path,
-                               iou_thrs=np.arange(0.5, 0.96, 0.05),
-                               oiou=opt.oiou)
-    else:
-        model.load_state_dict(torch.load(opt.checkpoint, map_location='cpu'))
-        evaluate_dummy(model,
-                       validation_dataloader,
-                       None,
-                       opt.save_path,
-                       iou_thrs=np.arange(0.5, 0.96, 0.05),
-                       oiou=opt.oiou)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate megadepth image pairs',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    parser.add_argument('--input_pairs',
-                        type=str,
-                        default='assets/megadepth/pairs.txt',
-                        help='Path to the list of image pairs')
-    parser.add_argument('--dataset_path',
-                        type=str,
-                        default='assets/megadepth/',
-                        help='Path to the directory that contains the images')
-    parser.add_argument('--save_path',
-                        type=str,
-                        default='outputs/',
-                        help='Path to the directory that contains the images')
-    parser.add_argument('--checkpoint',
-                        type=str,
-                        default='assets/checkpoints/models.pth',
-                        help='Path to the checkpoints of matching model')
+    parser.add_argument(
+        '--input_pairs',
+        type=str,
+        default='assets/megadepth/pairs.txt',
+        help='Path to the list of image pairs',
+    )
+    parser.add_argument(
+        '--dataset_path',
+        type=str,
+        default='assets/megadepth/',
+        help='Path to the directory that contains the images',
+    )
+    parser.add_argument(
+        '--save_path',
+        type=str,
+        default='outputs/',
+        help='Path to the directory that contains the images',
+    )
+    parser.add_argument(
+        '--checkpoint',
+        type=str,
+        default='assets/checkpoints/models.pth',
+        help='Path to the checkpoints of overlap estimation model',
+    )
+    parser.add_argument(
+        '--config_path',
+        type=str,
+        default='configs/oetr_config.py',
+        help='Path to the configuration of model',
+    )
     parser.add_argument('--num_layers',
                         type=int,
                         default=50,
@@ -134,7 +112,4 @@ if __name__ == '__main__':
                         help='num_workers')
     opt = parser.parse_args()
     Path(opt.save_path).mkdir(exist_ok=True, parents=True)
-    if opt.scale:
-        main_scale(opt)
-    else:
-        main(opt)
+    main(opt)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   preprocess_overlap.py
 @Time    :   2021/06/29 11:11:49
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 
 import argparse
 import datetime
@@ -18,6 +18,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
+
+from src.datasets.utils import numpy_overlap_box, resize_dataset
 
 
 def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
@@ -44,111 +46,10 @@ def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
     viz = cv2.hconcat([left, right])
     depth_viz = cv2.hconcat([
         np.stack([depth1.numpy()] * 3, -1) * 10,
-        np.stack([depth2.numpy()] * 3, -1) * 10
+        np.stack([depth2.numpy()] * 3, -1) * 10,
     ])
     all_viz = cv2.vconcat([viz, depth_viz])
     cv2.imwrite('all_' + output, all_viz)
-
-
-def overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2, bbox2,
-                ratio2):
-
-    mask1 = torch.where(depth1 > 0)
-    u1, v1 = mask1[1], mask1[0]
-    Z1 = depth1[v1, u1]
-
-    # COLMAP convention
-    x1 = (u1 + bbox1[1] + 0.5) / ratio1[1]
-    y1 = (v1 + bbox1[0] + 0.5) / ratio1[0]
-    X1 = (x1 - K1[0, 2]) * (Z1 / K1[0, 0])
-    Y1 = (y1 - K1[1, 2]) * (Z1 / K1[1, 1])
-    XYZ1_hom = torch.cat(
-        [
-            X1.view(1, -1),
-            Y1.view(1, -1),
-            Z1.view(1, -1),
-            torch.ones_like(Z1.view(1, -1)),
-        ],
-        dim=0,
-    )
-    XYZ2_hom = torch.chain_matmul(pose2, torch.inverse(pose1), XYZ1_hom)
-    XYZ2 = XYZ2_hom[:-1, :] / XYZ2_hom[-1, :].view(1, -1)
-
-    uv2_hom = torch.matmul(K2, XYZ2)
-    uv2 = uv2_hom[:-1, :] / uv2_hom[-1, :].view(1, -1)
-    h, w = depth2.size()
-    u2 = (uv2[0, :] * ratio2[1] - bbox2[1] - 0.5)
-    v2 = (uv2[1, :] * ratio2[0] - bbox2[0] - 0.5)
-    uv2 = torch.cat([u2.view(1, -1), v2.view(1, -1)], dim=0)
-    i = uv2[0, :].long()
-    j = uv2[1, :].long()
-    valid_corners = torch.min(torch.min(i >= 0, j >= 0),
-                              torch.min(i < h, j < w))
-
-    valid_uv1 = torch.stack(
-        (u1[valid_corners], v1[valid_corners])).numpy().astype(int)
-    valid_uv2 = uv2[:, valid_corners].numpy().astype(int)
-    # depth validation
-    Z2 = depth2[valid_uv2[1], valid_uv2[0]]
-    inlier_mask = torch.abs(XYZ2[2, valid_corners] - Z2) < 0.5
-
-    valid_uv1 = valid_uv1[:, inlier_mask]
-    valid_uv2 = valid_uv2[:, inlier_mask]
-    box1 = [(valid_uv1[0].min(), valid_uv1[1].min()),
-            (valid_uv1[0].max(), valid_uv1[1].max())]
-    box2 = [(valid_uv2[0].min(), valid_uv2[1].min()),
-            (valid_uv2[0].max(), valid_uv2[1].max())]
-    return box1, valid_uv1, box2, valid_uv2
-
-
-def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
-                      bbox2, ratio2):
-    mask1 = np.where(depth1 > 0)
-    u1, v1 = mask1[1], mask1[0]
-    Z1 = depth1[v1, u1]
-
-    # COLMAP convention
-    x1 = (u1 + bbox1[1] + 0.5) / ratio1[1]
-    y1 = (v1 + bbox1[0] + 0.5) / ratio1[0]
-    X1 = (x1 - K1[0, 2]) * (Z1 / K1[0, 0])
-    Y1 = (y1 - K1[1, 2]) * (Z1 / K1[1, 1])
-    XYZ1_hom = np.concatenate(
-        [
-            X1.reshape(1, -1),
-            Y1.reshape(1, -1),
-            Z1.reshape(1, -1),
-            np.ones_like(Z1.reshape(1, -1)),
-        ],
-        axis=0,
-    )
-    XYZ2_hom = pose2 @ np.linalg.inv(pose1) @ XYZ1_hom
-    XYZ2 = XYZ2_hom[:-1, :] / XYZ2_hom[-1, :].reshape(1, -1)
-
-    uv2_hom = K2 @ XYZ2
-    uv2 = uv2_hom[:-1, :] / uv2_hom[-1, :].reshape(1, -1)
-    h, w = depth2.shape
-    u2 = (uv2[0, :] * ratio2[1] - bbox2[1] - 0.5)
-    v2 = (uv2[1, :] * ratio2[0] - bbox2[0] - 0.5)
-    uv2 = np.concatenate([u2.reshape(1, -1), v2.reshape(1, -1)], axis=0)
-    i = uv2[0, :].astype(int)
-    j = uv2[1, :].astype(int)
-
-    valid_corners = np.logical_and(np.logical_and(i >= 0, j >= 0),
-                                   np.logical_and(i < h, j < w))
-
-    valid_uv1 = np.stack((u1[valid_corners], v1[valid_corners])).astype(int)
-    valid_uv2 = uv2[:, valid_corners].astype(int)
-    # depth validation
-    Z2 = depth2[valid_uv2[1], valid_uv2[0]]
-    inlier_mask = np.absolute(XYZ2[2, valid_corners] - Z2) < 0.5
-
-    valid_uv1 = valid_uv1[:, inlier_mask]
-    valid_uv2 = valid_uv2[:, inlier_mask]
-    box1 = [(valid_uv1[0].min(), valid_uv1[1].min()),
-            (valid_uv1[0].max(), valid_uv1[1].max())]
-    box2 = [(valid_uv2[0].min(), valid_uv2[1].min()),
-            (valid_uv2[0].max(), valid_uv2[1].max())]
-    return box1, valid_uv1, box2, valid_uv2
 
 
 class MegaDepthDataset(Dataset):
@@ -187,31 +88,6 @@ class MegaDepthDataset(Dataset):
         self.with_mask = with_mask
 
         self.dataset = []
-
-    def resize_dataset(self, img, depth=False):
-        h, w = img.shape
-        # resize w*h
-        if w > h:
-            if depth:
-                img1 = cv2.resize(
-                    img, (int(self.image_size[0] / h * w), self.image_size[0]),
-                    interpolation=cv2.INTER_NEAREST)
-            else:
-                img1 = cv2.resize(
-                    img, (int(self.image_size[0] / h * w), self.image_size[0]))
-            resize_ratio = (int(self.image_size[0] / h * w) / w,
-                            self.image_size[0] / h)
-        else:
-            if depth:
-                img1 = cv2.resize(
-                    img, (self.image_size[0], int(self.image_size[0] * h / w)),
-                    interpolation=cv2.INTER_NEAREST)
-            else:
-                img1 = cv2.resize(
-                    img, (self.image_size[0], int(self.image_size[0] * h / w)))
-            resize_ratio = (self.image_size[0] / w,
-                            int(self.image_size[0] * h / w) / h)
-        return img1, resize_ratio
 
     def caculate_depth(pos, depth):
         ids = torch.arange(0, pos.size(1))
@@ -294,11 +170,11 @@ class MegaDepthDataset(Dataset):
                     continue
                 points2D_image1 = np.array([[
                     int(points3D_id_to_2D[idx1][idx][0]),
-                    int(points3D_id_to_2D[idx1][idx][1])
+                    int(points3D_id_to_2D[idx1][idx][1]),
                 ] for idx in matches])
                 points2D_image2 = np.array([[
                     int(points3D_id_to_2D[idx2][idx][0]),
-                    int(points3D_id_to_2D[idx2][idx][1])
+                    int(points3D_id_to_2D[idx2][idx][1]),
                 ] for idx in matches])
                 point3D_id = np.random.choice(matches)
                 point2D1 = points3D_id_to_2D[idx1][point3D_id]
@@ -358,15 +234,15 @@ class MegaDepthDataset(Dataset):
         intrinsics2 = pair_metadata['intrinsics2']
         pose2 = pair_metadata['pose2']
 
-        gray1, resize_ratio1 = self.resize_dataset(gray1)
-        gray2, resize_ratio2 = self.resize_dataset(gray2)
+        gray1, resize_ratio1 = resize_dataset(gray1, self.image_size)
+        gray2, resize_ratio2 = resize_dataset(gray2, self.image_size)
 
         central_match = pair_metadata['central_match'] * np.concatenate(
             (resize_ratio1, resize_ratio2))
         gray1, bbox1, gray2, bbox2 = self.crop(gray1, gray2, central_match)
 
-        depth1, _ = self.resize_dataset(depth1, True)
-        depth2, _ = self.resize_dataset(depth2, True)
+        depth1, _ = resize_dataset(depth1, self.image_size, True)
+        depth2, _ = resize_dataset(depth2, self.image_size, True)
 
         depth1 = depth1[bbox1[0]:bbox1[0] + self.image_size[0],
                         bbox1[1]:bbox1[1] + self.image_size[1], ]
@@ -388,8 +264,8 @@ class MegaDepthDataset(Dataset):
 
             mask1 = np.array(Image.open(mask_path1))
             mask2 = np.array(Image.open(mask_path2))
-            mask1, _ = self.resize_dataset(mask1, True)
-            mask2, _ = self.resize_dataset(mask2, True)
+            mask1, _ = resize_dataset(mask1, self.image_size, True)
+            mask2, _ = resize_dataset(mask2, self.image_size, True)
 
             mask1 = mask1[bbox1[0]:bbox1[0] + self.image_size[0],
                           bbox1[1]:bbox1[1] + self.image_size[1], ]
@@ -398,8 +274,8 @@ class MegaDepthDataset(Dataset):
         else:
             mask1 = np.zeros(1)
             mask2 = np.zeros(1)
-        match_file_name = pair_metadata['image_path1'].split(
-            '/')[-1] + '_' + pair_metadata['image_path2'].split('/')[-1]
+        match_file_name = (pair_metadata['image_path1'].split('/')[-1] + '_' +
+                           pair_metadata['image_path2'].split('/')[-1])
 
         return (
             gray1,
@@ -474,8 +350,8 @@ class MegaDepthDataset(Dataset):
             'pose1': torch.from_numpy(pose1.astype(np.float32)),
             'ratio1': torch.from_numpy(np.asarray(resize_ratio1, np.float32)),
             'bbox1': torch.from_numpy(bbox1.astype(np.float32)),
-            'image0': torch.from_numpy(image1 / 255.).float()[None],
-            'image1': torch.from_numpy(image2 / 255.).float()[None],
+            'image0': torch.from_numpy(image1 / 255.0).float()[None],
+            'image1': torch.from_numpy(image2 / 255.0).float()[None],
             'mask1': torch.from_numpy(mask1.astype(np.uint8)),
             'mask2': torch.from_numpy(mask2.astype(np.uint8)),
             'file_name': match_file_name,
@@ -484,16 +360,19 @@ class MegaDepthDataset(Dataset):
             'pose2': torch.from_numpy(pose2.astype(np.float32)),
             'ratio2': torch.from_numpy(np.asarray(resize_ratio2, np.float32)),
             'bbox2': torch.from_numpy(bbox2.astype(np.float32)),
-            'central_match': torch.from_numpy(central_match.astype(np.float32))
+            'central_match':
+            torch.from_numpy(central_match.astype(np.float32)),
         }
 
 
-def main(scene_list_path,
-         scene_info_path,
-         dataset_path,
-         batch_size,
-         num_workers,
-         local_rank=0):
+def main(
+    scene_list_path,
+    scene_info_path,
+    dataset_path,
+    batch_size,
+    num_workers,
+    local_rank=0,
+):
     dataset = MegaDepthDataset(
         scene_list_path=scene_list_path,
         scene_info_path=scene_info_path,
@@ -512,29 +391,48 @@ def main(scene_list_path,
             continue
 
         box1, valid_uv1, box2, valid_uv2 = numpy_overlap_box(
-            batch['intrinsics1'][0].numpy(), batch['depth1'][0].numpy(),
-            batch['pose1'][0].numpy(), batch['bbox1'][0].numpy(),
-            batch['ratio1'][0].numpy(), batch['intrinsics2'][0].numpy(),
-            batch['depth2'][0].numpy(), batch['pose2'][0].numpy(),
-            batch['bbox2'][0].numpy(), batch['ratio2'][0].numpy())
-        visualize_box(batch['image0'][0] * 255, box1, valid_uv1,
-                      batch['depth1'][0], batch['image1'][0] * 255, box2,
-                      valid_uv2, batch['depth2'][0], batch['file_name'][0])
+            batch['intrinsics1'][0].numpy(),
+            batch['depth1'][0].numpy(),
+            batch['pose1'][0].numpy(),
+            batch['bbox1'][0].numpy(),
+            batch['ratio1'][0].numpy(),
+            batch['intrinsics2'][0].numpy(),
+            batch['depth2'][0].numpy(),
+            batch['pose2'][0].numpy(),
+            batch['bbox2'][0].numpy(),
+            batch['ratio2'][0].numpy(),
+        )
+        visualize_box(
+            batch['image0'][0] * 255,
+            box1,
+            valid_uv1,
+            batch['depth1'][0],
+            batch['image1'][0] * 255,
+            box2,
+            valid_uv2,
+            batch['depth2'][0],
+            batch['file_name'][0],
+        )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate megadepth image pairs',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    parser.add_argument('--scene_list_path',
-                        type=str,
-                        default='assets/megadepth_validation.txt',
-                        help='Path to the list of scenes')
-    parser.add_argument('--scene_info_path',
-                        type=str,
-                        default='assets/megadepth/',
-                        help='Path to the list of image pairs')
+    parser.add_argument(
+        '--scene_list_path',
+        type=str,
+        default='assets/megadepth_validation.txt',
+        help='Path to the list of scenes',
+    )
+    parser.add_argument(
+        '--scene_info_path',
+        type=str,
+        default='assets/megadepth/',
+        help='Path to the list of image pairs',
+    )
     parser.add_argument('--dataset_path',
                         type=str,
                         default='',
