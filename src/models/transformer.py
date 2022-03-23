@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   transformer.py
 @Time    :   2021/07/01 15:24:40
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 import copy
 from typing import Optional
 
@@ -21,14 +21,16 @@ def _get_clones(module, N):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self,
-                 embed_dim,
-                 num_heads,
-                 dropout=0.,
-                 bias=True,
-                 kdim=None,
-                 vdim=None,
-                 attention='linear'):
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0.0,
+        bias=True,
+        kdim=None,
+        vdim=None,
+        attention='linear',
+    ):
         super(MultiHeadAttention, self).__init__()
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
@@ -37,8 +39,8 @@ class MultiHeadAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         self.embed_dim = embed_dim
-        assert self.head_dim * num_heads == self.embed_dim,\
-            'embed_dim must be divisible by num_heads'
+        assert (self.head_dim * num_heads == self.embed_dim
+                ), 'embed_dim must be divisible by num_heads'
 
         # multi-head attention
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -70,68 +72,6 @@ class MultiHeadAttention(nn.Module):
         return message
 
 
-class EncoderLayer2(nn.Module):
-    def __init__(self, d_model, nhead, attention='linear'):
-        super(EncoderLayer2, self).__init__()
-
-        self.dim = d_model // nhead
-        self.nhead = nhead
-
-        # multi-head attention
-        self.q_proj = nn.Linear(d_model, d_model, bias=False)
-        self.k_proj = nn.Linear(d_model, d_model, bias=False)
-        self.v_proj = nn.Linear(d_model, d_model, bias=False)
-        if attention == 'linear':
-            self.attention = LinearAttention()
-        else:
-            self.attention = FullAttention()
-        self.merge = nn.Linear(d_model, d_model, bias=False)
-
-        # feed-forward network
-        self.mlp = nn.Sequential(
-            nn.Linear(d_model * 2, d_model * 2, bias=False),
-            nn.ReLU(True),
-            nn.Linear(d_model * 2, d_model, bias=False),
-        )
-
-        # norm and dropout
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-
-    def forward(self, x, source, x_mask=None, source_mask=None):
-        """
-        Args:
-            x (torch.Tensor): [N, L, C]
-            source (torch.Tensor): [N, S, C]
-            x_mask (torch.Tensor): [N, L] (optional)
-            source_mask (torch.Tensor): [N, S] (optional)
-        """
-        bs = x.size(0)
-        query, key, value = x, source, source
-
-        # multi-head attention
-        # [N, L, (H, D)]
-        query = self.q_proj(query).view(bs, -1, self.nhead, self.dim)
-        # [N, S, (H, D)]
-        key = self.k_proj(key).view(bs, -1, self.nhead, self.dim)
-        value = self.v_proj(value).view(bs, -1, self.nhead, self.dim)
-        # [N, L, (H, D)]
-        message = self.attention(query,
-                                 key,
-                                 value,
-                                 q_mask=x_mask,
-                                 kv_mask=source_mask)
-        # [N, L, C]
-        message = self.merge(message.view(bs, -1, self.nhead * self.dim))
-        message = self.norm1(message)
-
-        # feed-forward network
-        message = self.mlp(torch.cat([x, message], dim=2))
-        message = self.norm2(message)
-
-        return x + message
-
-
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, attention='linear'):
         super(EncoderLayer, self).__init__()
@@ -150,9 +90,11 @@ class EncoderLayer(nn.Module):
         self.merge = nn.Linear(d_model, d_model, bias=False)
 
         # feed-forward network
-        self.mlp = nn.Sequential(nn.Linear(d_model, d_model * 2, bias=False),
-                                 nn.GELU(),
-                                 nn.Linear(d_model * 2, d_model, bias=False))
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, d_model * 2, bias=False),
+            nn.GELU(),
+            nn.Linear(d_model * 2, d_model, bias=False),
+        )
 
         # norm and dropout
         self.pre_norm_q = nn.LayerNorm(d_model)
@@ -228,8 +170,8 @@ class LocalFeatureTransformer(nn.Module):
             mask1 (torch.Tensor): [N, S] (optional)
         """
 
-        assert self.d_model == feat0.size(2),\
-            'the feature number of src and transformer must be equal'
+        assert self.d_model == feat0.size(
+            2), 'the feature number of src and transformer must be equal'
 
         for layer, name in zip(self.layers, self.layer_names):
             if name == 'self':
@@ -263,9 +205,11 @@ class DecoderLayer(nn.Module):
         self.dropout3 = nn.Dropout(dropout)
 
         # feed-forward network
-        self.mlp = nn.Sequential(nn.Linear(d_model, d_model * 2, bias=False),
-                                 nn.ReLU(True),
-                                 nn.Linear(d_model * 2, d_model, bias=False))
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, d_model * 2, bias=False),
+            nn.ReLU(True),
+            nn.Linear(d_model * 2, d_model, bias=False),
+        )
 
         # norm and dropout
         # self.pre_norm_q = nn.LayerNorm(d_model)
@@ -296,11 +240,13 @@ class DecoderLayer(nn.Module):
         tgt2 = self.self_attn(q, k, v=tgt2, q_mask=tgt_mask, kv_mask=tgt_mask)
         tgt = tgt + self.dropout1(tgt2)
         tgt2 = self.norm2(tgt)
-        tgt2 = self.multihead_attn(q=self.with_pos_embed(tgt2, tgt_pos),
-                                   k=self.with_pos_embed(memory, m_pos),
-                                   v=memory,
-                                   q_mask=tgt_mask,
-                                   kv_mask=memory_mask)
+        tgt2 = self.multihead_attn(
+            q=self.with_pos_embed(tgt2, tgt_pos),
+            k=self.with_pos_embed(memory, m_pos),
+            v=memory,
+            q_mask=tgt_mask,
+            kv_mask=memory_mask,
+        )
         tgt = tgt + self.dropout2(tgt2)
         tgt2 = self.norm3(tgt)
         tgt2 = self.mlp(tgt2)
@@ -325,12 +271,14 @@ class TransformerDecoder(nn.Module):
                 m_pos=None):
         output = tgt
         for layer in self.layers:
-            output = layer(output,
-                           memory,
-                           tgt_mask=tgt_mask,
-                           memory_mask=memory_mask,
-                           tgt_pos=tgt_pos,
-                           m_pos=m_pos)
+            output = layer(
+                output,
+                memory,
+                tgt_mask=tgt_mask,
+                memory_mask=memory_mask,
+                tgt_pos=tgt_pos,
+                m_pos=m_pos,
+            )
         if self.norm is not None:
             output = self.norm(output)
         return output
@@ -362,16 +310,18 @@ class QueryTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self,
-                feat0,
-                feat1,
-                query_embed0,
-                query_embed1,
-                pos0,
-                pos1,
-                mask0=None,
-                mask1=None):
-        '''
+    def forward(
+        self,
+        feat0,
+        feat1,
+        query_embed0,
+        query_embed1,
+        pos0,
+        pos1,
+        mask0=None,
+        mask1=None,
+    ):
+        """
         Args:
             feat0:  [bs, c, h0, w0]
             feat1:
@@ -382,7 +332,7 @@ class QueryTransformer(nn.Module):
             mask0:
             mask1:
         Returns:
-        '''
+        """
         # pdb.set_trace()
         bs, c, h0, ww = feat0.shape
         feat0 = feat0.flatten(2).permute(0, 2, 1)
@@ -410,21 +360,25 @@ class QueryTransformer(nn.Module):
         # pdb.set_trace()
         tgt0 = torch.zeros_like(query_embed0)
         memory0 = feat0
-        hs0 = self.decoder(tgt0,
-                           memory0,
-                           tgt_mask=None,
-                           memory_mask=mask0,
-                           tgt_pos=query_embed0,
-                           m_pos=pos0)
+        hs0 = self.decoder(
+            tgt0,
+            memory0,
+            tgt_mask=None,
+            memory_mask=mask0,
+            tgt_pos=query_embed0,
+            m_pos=pos0,
+        )
 
         tgt1 = torch.zeros_like(query_embed1)
         memory1 = feat1
-        hs1 = self.decoder(tgt1,
-                           memory1,
-                           tgt_mask=None,
-                           memory_mask=mask1,
-                           tgt_pos=query_embed1,
-                           m_pos=pos1)
+        hs1 = self.decoder(
+            tgt1,
+            memory1,
+            tgt_mask=None,
+            memory_mask=mask1,
+            tgt_pos=query_embed1,
+            m_pos=pos1,
+        )
         # [bs, num_q, c]
         return hs0, hs1, memory0, memory1
 
@@ -438,7 +392,8 @@ class ChannelAttention(nn.Module):
         self.fc = nn.Sequential(
             nn.Conv2d(in_planes, in_planes // 16, 1, bias=False),
             nn.ReLU(inplace=False),
-            nn.Conv2d(in_planes // 16, in_planes, 1, bias=False))
+            nn.Conv2d(in_planes // 16, in_planes, 1, bias=False),
+        )
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):

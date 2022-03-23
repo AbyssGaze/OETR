@@ -24,6 +24,7 @@ from src.datasets.utils import numpy_overlap_box, resize_dataset
 
 def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
                   depth2, output):
+    """visualization image pairs co-visible area."""
     left = cv2.rectangle(
         np.stack([image1.numpy()] * 3, -1)[0], bbox1[0], bbox1[1], (255, 0, 0),
         2)
@@ -90,6 +91,17 @@ class MegaDepthDataset(Dataset):
         self.dataset = []
 
     def caculate_depth(pos, depth):
+        """calculate valid depth of point cloud.
+
+        Args:
+            pos (tensor): 2D points cloud with x,y coordinate
+            depth (tensor): depth map of scene
+
+        Returns:
+            interpolated_depth: depth value
+            pos: valid depth position
+            ids: valid depth index
+        """
         ids = torch.arange(0, pos.size(1))
         h, w = depth.size()
         i = pos[0, :].long()
@@ -299,6 +311,8 @@ class MegaDepthDataset(Dataset):
         )
 
     def crop(self, image1, image2, central_match):
+        """crop patch from the central match and protect patch, not outside the
+        boundary."""
         bbox1_i = max(int(central_match[0]) - self.image_size[0] // 2, 0)
         if bbox1_i + self.image_size[0] >= image1.shape[0]:
             bbox1_i = image1.shape[0] - self.image_size[0]

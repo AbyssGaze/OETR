@@ -22,11 +22,16 @@ torch.set_grad_enabled(False)
 
 
 def main(opt):
+    # Init device and configurations
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     cfg = get_cfg_defaults()
     cfg.merge_from_file(opt.config_path)
+
+    # Build model
     model = OETR(cfg.OETR).eval().to(device)
     model.load_state_dict(torch.load(opt.checkpoint))
+
+    # Build datasets
     validation_dataset = MegaDepthDataset(
         scene_list_path='assets/{}validation_scenes.txt'.format(
             '' if opt.debug else 'megadepth_'),
@@ -44,7 +49,7 @@ def main(opt):
         num_workers=opt.num_workers,
         shuffle=False,
     )
-
+    # Evaluate datasets
     evaluate_dummy(
         model,
         validation_dataloader,

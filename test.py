@@ -20,6 +20,7 @@ from utils.utils import read_image, visualize_overlap, visualize_overlap_gt
 torch.set_grad_enabled(False)
 
 
+# test model with image pairs dataset
 def main(opt):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     cfg = get_cfg_defaults()
@@ -38,18 +39,20 @@ def main(opt):
         image2, inp2, scales2 = read_image(os.path.join(opt.input_dir,
                                                         name2), device,
                                            opt.resize, 0, opt.resize_float)
-
+        # Inference model
         box1, box2 = model.forward_dummy(inp1, inp2)
         output = os.path.join(opt.output_dir, name1 + '-' + name2)
         np_box1 = box1[0].cpu().numpy().astype(int)
         np_box2 = box2[0].cpu().numpy().astype(int)
 
         if len(pair) > 2:
+            # Visualization groundtruth and calculated result
             gt_box1 = np.array(pair[2:6]).astype(int)
             gt_box2 = np.array(pair[6:10]).astype(int)
             visualize_overlap_gt(image1, np_box1, gt_box1, image2, np_box2,
                                  gt_box2, output)
         else:
+            # Visualization results
             visualize_overlap(image1, np_box1, image2, np_box2, output)
 
 

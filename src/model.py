@@ -19,9 +19,8 @@ from .models.backbone import PatchMerging, ResnetEncoder
 from .models.head import DynamicConv, FCOSHead
 from .models.transformer import (ChannelAttention, LocalFeatureTransformer,
                                  QueryTransformer, SpatialAttention)
-from .models.utils import (PositionEncodingSine, PositionEncodingSine2,
-                           box_tlbr_to_xyxy, box_xyxy_to_cxywh,
-                           compute_locations, delta2bbox)
+from .models.utils import (PositionEncodingSine, box_tlbr_to_xyxy,
+                           box_xyxy_to_cxywh, compute_locations, delta2bbox)
 
 INF = 1e9
 
@@ -39,6 +38,10 @@ def MLP(channels, do_bn=True):
     return nn.Sequential(*layers)
 
 
+"""OETR model architecture
+"""
+
+
 class OETR(nn.Module):
     def __init__(self, cfg):
         super(OETR, self).__init__()
@@ -47,8 +50,8 @@ class OETR(nn.Module):
         self.softmax_temperature = 1
         self.iouloss = IouOverlapLoss(reduction='mean', oiou=cfg.LOSS.OIOU)
         self.cycle_loss = CycleOverlapLoss()
-        self.pos_encoding = PositionEncodingSine2(self.d_model,
-                                                  max_shape=cfg.NECK.MAX_SHAPE)
+        self.pos_encoding = PositionEncodingSine(self.d_model,
+                                                 max_shape=cfg.NECK.MAX_SHAPE)
         self.patchmerging = PatchMerging(
             (20, 20),
             self.d_model,
@@ -102,6 +105,7 @@ class OETR(nn.Module):
                                         self.device) + 0.5) * stride
         return coord_xy_map.reshape(1, feat_hw[0] * feat_hw[1], 2)
 
+    # Inference pipeline
     def forward_dummy(self, image1, image2):
         N, h1, w1, _ = image1.shape
         h2, w2 = image2.shape[1:3]
@@ -168,6 +172,7 @@ class OETR(nn.Module):
 
         return pred_bbox_xyxy1, pred_bbox_xyxy2
 
+    # Trainning pipeline
     def forward(self, data, validation=False):
         N, h1, w1, _ = data['image1'][data['overlap_valid']].shape
         h2, w2 = data['image2'][data['overlap_valid']].shape[1:3]
@@ -375,6 +380,7 @@ class OETR(nn.Module):
             }
 
 
+# Model head is simple FC module
 class OETR_FC(nn.Module):
     def __init__(self, cfg):
         super(OETR_FC, self).__init__()
@@ -408,9 +414,9 @@ class OETR_FC(nn.Module):
         feat2 = self.input_proj(
             self.backbone(data['image2'][data['overlap_valid']]))
         # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(self.pos_encoding(feat1),
+        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
                             'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(self.pos_encoding(feat2),
+        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
                             'n c h w -> n (h w) c').contiguous()
         feat_r1 = rearrange(feat1, 'n c h w -> n (h w) c').contiguous()
         feat_r2 = rearrange(feat2, 'n c h w -> n (h w) c').contiguous()
@@ -480,12 +486,15 @@ class OETR_FC(nn.Module):
                 'loss': loss.mean()
             }
 
+    # inference pipeline
     def forward_dummy(self, image1, image2):
         feat1 = self.input_proj(self.backbone(image1))
         feat2 = self.input_proj(self.backbone(image2))
         # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(self.pos_encoding(feat1), 'n c h w -> n (h w) c')
-        feat_c2 = rearrange(self.pos_encoding(feat2), 'n c h w -> n (h w) c')
+        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
+                            'n c h w -> n (h w) c')
+        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
+                            'n c h w -> n (h w) c')
         feat_r1 = rearrange(feat1, 'n c h w -> n (h w) c')
         feat_r2 = rearrange(feat2, 'n c h w -> n (h w) c')
         feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
@@ -633,9 +642,9 @@ class OETR_FCOS(nn.Module):
             self.backbone(data['image2'][data['overlap_valid']]))
         h1, h2 = feat1.shape[2], feat2.shape[2]
         # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(self.pos_encoding(feat1),
+        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
                             'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(self.pos_encoding(feat2),
+        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
                             'n c h w -> n (h w) c').contiguous()
 
         feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
@@ -727,9 +736,9 @@ class OETR_FCOS(nn.Module):
             self.backbone(data['image2'][data['overlap_valid']]))
         h1, h2 = feat1.shape[2], feat2.shape[2]
         # add featmap with positional encoding, then flatten it to sequence
-        feat_c1 = rearrange(self.pos_encoding(feat1),
+        feat_c1 = rearrange(feat1 + self.pos_encoding(feat1),
                             'n c h w -> n (h w) c').contiguous()
-        feat_c2 = rearrange(self.pos_encoding(feat2),
+        feat_c2 = rearrange(feat2 + self.pos_encoding(feat2),
                             'n c h w -> n (h w) c').contiguous()
 
         feat_a1, feat_a2 = self.attn(feat_c1, feat_c2)
@@ -770,6 +779,7 @@ class OETR_FCOS(nn.Module):
         }
 
 
+# build model with different configuration
 def build_detectors(cfg):
     if cfg.MODEL == 'oetr':
         return OETR(cfg)

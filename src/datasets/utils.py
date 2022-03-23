@@ -33,6 +33,7 @@ def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
 
 
 def visualize_box(image1, bbox1, depth1, image2, bbox2, depth2, output):
+    """visualization co-visible bounding box of image pairs."""
     bbox1 = bbox1.numpy().astype(int)
     bbox2 = bbox2.numpy().astype(int)
 
@@ -47,7 +48,7 @@ def visualize_box(image1, bbox1, depth1, image2, bbox2, depth2, output):
         np.stack([depth2.numpy()] * 3, -1) * 10,
     ])
     all_viz = cv2.vconcat([viz, depth_viz])
-    cv2.imwrite('all_' + output, all_viz)
+    cv2.imwrite('bbox_' + output, all_viz)
 
 
 def visualize_mask(image1,
@@ -60,6 +61,7 @@ def visualize_mask(image1,
                    depth2,
                    output,
                    fig=False):
+    """visulaization co-visible bounding box and mask of image pairs."""
     bbox1 = bbox1.numpy()
     bbox2 = bbox2.numpy()
     mask1 = np.stack([mask1.numpy().astype(float)] * 3, -1) * np.array(
@@ -84,10 +86,11 @@ def visualize_mask(image1,
             np.stack([depth2.numpy()] * 3, -1) * 10,
         ])
         all_viz = cv2.vconcat([viz, depth_viz])
-        cv2.imwrite('all_' + output, all_viz)
+        cv2.imwrite('mask_' + output, all_viz)
 
 
 def resize_dataset(img, image_size, depth=False):
+    """resize image with different tyle."""
     if len(img.shape) == 2:
         h, w = img.shape
     else:
@@ -117,12 +120,14 @@ def resize_dataset(img, image_size, depth=False):
 
 
 def get_boxes(points):
+    """calculate boundary box of point cloud."""
     box = np.array(
         [points[0].min(), points[1].min(), points[0].max(), points[1].max()])
     return box
 
 
 def get_maskes(points, h, w):
+    """calculate the mask mat of point cloud, output binary mask."""
     points = points.astype(int)
     mask = np.zeros((h, w))
     mask[points[1], points[0]] = 1
@@ -131,6 +136,7 @@ def get_maskes(points, h, w):
 
 def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
                       bbox2, ratio2):
+    """calculate numpy array co-visible bounding box."""
     mask1 = np.where(depth1 > 0)
     u1, v1 = mask1[1], mask1[0]
     Z1 = depth1[v1, u1]
