@@ -274,6 +274,7 @@ class OETR(nn.Module):
         iouloss = self.iouloss(pred_bbox_xyxy1, gt_bbox_xyxy1, pred_bbox_xyxy2,
                                gt_bbox_xyxy2)
 
+        # IOU results
         iou1 = bbox_overlaps(
             pred_bbox_xyxy1,
             data['overlap_box1'][data['overlap_valid']],
@@ -289,6 +290,17 @@ class OETR(nn.Module):
         oiou2 = bbox_oiou(data['overlap_box2'][data['overlap_valid']],
                           pred_bbox_xyxy2).mean()
 
+        results = {
+            'pred_bbox1': pred_bbox_xyxy1,
+            'pred_bbox2': pred_bbox_xyxy2,
+            'iouloss': iouloss.mean(),
+            'wh_loss': wh_l1_loss.mean(),
+            'loc_loss': loc_l1_loss.mean(),
+            'iou1': iou1,
+            'iou2': iou2,
+            'oiou1': oiou1,
+            'oiou2': oiou2,
+        }
         # Using cycle consistency loss
         if self.cycle:
             cycle_loss = self.cycle_loss(
@@ -312,31 +324,9 @@ class OETR(nn.Module):
                 data['image2'].shape[1:3],
                 data['file_name'],
             )
+            results['cycle_loss'] = cycle_loss.mean()
 
-            return {
-                'pred_bbox1': pred_bbox_xyxy1,
-                'pred_bbox2': pred_bbox_xyxy2,
-                'iouloss': iouloss.mean(),
-                'cycle_loss': cycle_loss.mean(),
-                'wh_loss': wh_l1_loss.mean(),
-                'loc_loss': loc_l1_loss.mean(),
-                'iou1': iou1,
-                'iou2': iou2,
-                'oiou1': oiou1,
-                'oiou2': oiou2,
-            }
-        else:
-            return {
-                'pred_bbox1': pred_bbox_xyxy1,
-                'pred_bbox2': pred_bbox_xyxy2,
-                'iouloss': iouloss.mean(),
-                'wh_loss': wh_l1_loss.mean(),
-                'loc_loss': loc_l1_loss.mean(),
-                'iou1': iou1,
-                'iou2': iou2,
-                'oiou1': oiou1,
-                'oiou2': oiou2,
-            }
+        return results
 
 
 # build model with different configuration
