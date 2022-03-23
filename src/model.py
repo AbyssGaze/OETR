@@ -39,19 +39,23 @@ class OETR(nn.Module):
     """OETR model architecture."""
     def __init__(self, cfg):
         super(OETR, self).__init__()
+        # Architecture of feature extraction
         self.backbone = ResnetEncoder(cfg)
         self.d_model = self.backbone.last_layer // 4
-        self.softmax_temperature = 1
-        self.iouloss = IouOverlapLoss(reduction='mean', oiou=cfg.LOSS.OIOU)
-        self.cycle_loss = CycleOverlapLoss()
-        self.pos_encoding = PositionEncodingSine(self.d_model,
-                                                 max_shape=cfg.NECK.MAX_SHAPE)
+        self.input_proj = nn.Conv2d(self.backbone.last_layer,
+                                    self.d_model,
+                                    kernel_size=1)
+        self.input_proj2 = nn.Conv2d(self.d_model * 2,
+                                     self.d_model,
+                                     kernel_size=1)
         self.patchmerging = PatchMerging(
             (20, 20),
             self.d_model,
             norm_layer=nn.LayerNorm,
             patch_size=[4, 8, 16],
         )
+
+        # Regression module
         self.tlbr_reg = nn.Sequential(
             nn.Linear(self.d_model, self.d_model, False),
             nn.ReLU(inplace=True),
@@ -71,23 +75,25 @@ class OETR(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(self.d_model, 1, (1, 1)),
         )
-
+        # Only one overlap for every image, so query is set to one
         num_queries = 1
         self.query_embed1 = nn.Embedding(num_queries, self.d_model)
         self.query_embed2 = nn.Embedding(num_queries, self.d_model)
         self.transformer = QueryTransformer(self.d_model,
                                             nhead=8,
                                             num_layers=4)
+        self.pos_encoding = PositionEncodingSine(self.d_model,
+                                                 max_shape=cfg.NECK.MAX_SHAPE)
 
-        self.input_proj = nn.Conv2d(self.backbone.last_layer,
-                                    self.d_model,
-                                    kernel_size=1)
-        self.input_proj2 = nn.Conv2d(self.d_model * 2,
-                                     self.d_model,
-                                     kernel_size=1)
+        # Loss module
+        self.iouloss = IouOverlapLoss(reduction='mean', oiou=cfg.LOSS.OIOU)
+        self.cycle_loss = CycleOverlapLoss()
 
+        # Hyperparameters
         self.max_shape = cfg.NECK.MAX_SHAPE
         self.cycle = cfg.LOSS.CYCLE_OVERLAP
+        self.softmax_temperature = 1
+
         # self.init_weights()
 
     def init_weights(self):

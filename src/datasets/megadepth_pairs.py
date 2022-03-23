@@ -28,11 +28,24 @@ class MegaDepthPairsDataset(Dataset):
         min_overlap_ratio=0.1,
         max_overlap_ratio=0.7,
         max_scale_ratio=100,
-        preprocessing=None,
         pairs_per_scene=1000,
         image_size=[640, 640],
         with_mask=False,
     ):
+        """Generate trainning datasets from preprocessed txt file.
+
+        Args:
+            pairs_list_path (str, optional): preprocessed txt file. Defaults to 'assets/train_scenes_all.txt'.
+            scene_info_path (str, optional): origin scene info dataset. Defaults to 'assets/megadepth/scene_info'.
+            base_path (str, optional): origin full dataset. Defaults to 'assets/megadepth'.
+            train (bool, optional): in train pipeline. Defaults to True.
+            min_overlap_ratio (float, optional): min overlap ratio. Defaults to 0.1.
+            max_overlap_ratio (float, optional): max overlap ratio. Defaults to 0.7.
+            max_scale_ratio (int, optional): max scale difference. Defaults to 100.
+            pairs_per_scene (int, optional): extract pairs for every scene. Defaults to 1000.
+            image_size (list, optional): image size. Defaults to [640, 640].
+            with_mask (bool, optional): load mask or not. Defaults to False.
+        """
         # Read all image pairs information from pairs_list_path
         self.total_pairs = []
         with open(pairs_list_path, 'r') as f:
@@ -40,7 +53,6 @@ class MegaDepthPairsDataset(Dataset):
 
         self.scene_info_path = scene_info_path
         self.base_path = base_path
-        self.preprocessing = preprocessing
         self.train = train
 
         self.min_overlap_ratio = min_overlap_ratio
@@ -129,12 +141,7 @@ class MegaDepthPairsDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    def recover_pair(self, pair_metadata):
-        """calculate image pairs information from metadata.
-
-        Args:
-            pair_metadata (dict): contains intrinsic, pose, depth and image path
-        """
+    def __getitem__(self, idx):
         (
             image1,
             depth1,
@@ -154,7 +161,7 @@ class MegaDepthPairsDataset(Dataset):
             mask2,
             match_file_name,
             central_match,
-        ) = recover_pair(self.base_path, self.image_size, pair_metadata)
+        ) = recover_pair(self.base_path, self.image_size, self.dataset[idx])
 
         (
             overlap_box1,
@@ -174,55 +181,6 @@ class MegaDepthPairsDataset(Dataset):
             bbox2,
             resize_ratio2,
         )
-        return (
-            image1,
-            depth1,
-            intrinsics1,
-            pose1,
-            bbox1,
-            resize_ratio1,
-            overlap_box1,
-            overlap_mask1,
-            mask1,
-            image2,
-            depth2,
-            intrinsics2,
-            pose2,
-            bbox2,
-            resize_ratio2,
-            overlap_box2,
-            overlap_mask2,
-            mask2,
-            match_file_name,
-            central_match,
-            overlap_valid,
-        )
-
-    def __getitem__(self, idx):
-        (
-            image1,
-            depth1,
-            intrinsics1,
-            pose1,
-            bbox1,
-            resize_ratio1,
-            overlap_box1,
-            overlap_mask1,
-            mask1,
-            image2,
-            depth2,
-            intrinsics2,
-            pose2,
-            bbox2,
-            resize_ratio2,
-            overlap_box2,
-            overlap_mask2,
-            mask2,
-            match_file_name,
-            central_match,
-            overlap_valid,
-        ) = self.recover_pair(self.dataset[idx])
-
         return {
             'depth1': torch.from_numpy(depth1.astype(np.float32)),
             'intrinsics1': torch.from_numpy(intrinsics1.astype(np.float32)),
@@ -249,13 +207,20 @@ class MegaDepthPairsDataset(Dataset):
         }
 
 
-def main(pairs_list_path, dataset_path, batch_size, num_workers, local_rank=0):
+def main(pairs_list_path, dataset_path, batch_size, num_workers):
+    """test process for dataloader results visualization.
+
+    Args:
+        pairs_list_path (str): preprocessed txt file
+        dataset_path (str): root directory
+        batch_size (int): batch size for dataloader
+        num_workers (int): num workers for dataloader
+    """
     dataset = MegaDepthPairsDataset(
         pairs_list_path=pairs_list_path,
         scene_info_path=os.path.join(dataset_path, 'scene_info'),
         base_path=dataset_path,
         train=False,
-        preprocessing=None,
         pairs_per_scene=100,
     )
     dataset.build_dataset()
@@ -301,10 +266,6 @@ if __name__ == '__main__':
                         type=int,
                         default=1,
                         help='num_workers')
-    parser.add_argument('--local_rank',
-                        type=int,
-                        default=0,
-                        help='node rank for distributed training')
     args = parser.parse_args()
 
     main(**args.__dict__)
