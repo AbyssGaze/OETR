@@ -31,6 +31,7 @@ def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
         depth1, depth2 (np.array): depth map of image1 and image2
         output (str): output directory
     """
+    # Origin image pairs
     left = cv2.rectangle(
         np.stack([image1.numpy()] * 3, -1)[0], bbox1[0], bbox1[1], (255, 0, 0),
         2)
@@ -38,9 +39,10 @@ def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
         np.stack([image2.numpy()] * 3, -1)[0], bbox2[0], bbox2[1], (0, 0, 255),
         2)
     viz = cv2.hconcat([left, right])
+
+    # Visualize mask
     mask1 = np.zeros((left.shape), dtype=np.float32)
     mask2 = np.zeros((right.shape), dtype=np.float32)
-
     for i in range(points1.shape[1]):
         mask1 = cv2.circle(mask1, (points1[0, i], points1[1, i]), 1,
                            (255, 0, 0))
@@ -51,6 +53,8 @@ def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
     left = cv2.addWeighted(left, 0.5, mask1, 0.5, 0)
     right = cv2.addWeighted(right, 0.5, mask2, 0.5, 0)
     viz = cv2.hconcat([left, right])
+
+    # Visualize depth
     depth_viz = cv2.hconcat([
         np.stack([depth1.numpy()] * 3, -1) * 10,
         np.stack([depth2.numpy()] * 3, -1) * 10,

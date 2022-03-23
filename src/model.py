@@ -95,12 +95,13 @@ class OETR(nn.Module):
         nn.init.constant_(self.fc_reg.bias, 0)
 
     def generate_mesh_grid(self, feat_hw, stride):
+        """generate mesh grid with specific width, height and stride."""
         coord_xy_map = (create_meshgrid(feat_hw[0], feat_hw[1], False,
                                         self.device) + 0.5) * stride
         return coord_xy_map.reshape(1, feat_hw[0] * feat_hw[1], 2)
 
-    # Inference pipeline
-    def forward_dummy(self, image1, image2):
+    def offset_regression(self, image1, image2, mask1=None, mask2=None):
+        """forward image pairs overlap estimation."""
         N, h1, w1, _ = image1.shape
         h2, w2 = image2.shape[1:3]
 
@@ -108,73 +109,6 @@ class OETR(nn.Module):
         feat2 = self.backbone(image2)
         feat1 = self.input_proj(feat1)
         feat2 = self.input_proj(feat2)
-        feat1 = self.patchmerging(feat1)
-        feat2 = self.patchmerging(feat2)
-        feat1 = self.input_proj2(feat1)
-        feat2 = self.input_proj2(feat2)
-
-        hf1, wf1 = feat1.shape[2:]
-        hf2, wf2 = feat2.shape[2:]
-        wh_scale1 = torch.tensor([w1, h1], device=feat1.device)
-        wh_scale2 = torch.tensor([w2, h2], device=feat1.device)
-
-        pos1 = self.pos_encoding(feat1)
-        pos2 = self.pos_encoding(feat2)
-
-        hs1, hs2, memory1, memory2 = self.transformer(feat1, feat2,
-                                                      self.query_embed1.weight,
-                                                      self.query_embed2.weight,
-                                                      pos1, pos2)
-        # TODO:image1/image2 attention control image2 regression
-        att1 = torch.einsum('blc, bnc->bln', memory1, hs1)
-        att2 = torch.einsum('blc, bnc->bln', memory2, hs2)
-
-        heatmap1 = rearrange(memory1 * att1,
-                             'n (h w) c -> n c h w',
-                             h=hf1,
-                             w=wf1)
-        heatmap2 = rearrange(memory2 * att2,
-                             'n (h w) c -> n c h w',
-                             h=hf2,
-                             w=wf2)
-        heatmap1_flatten = rearrange(self.heatmap_conv(heatmap1),
-                                     'n c h w -> n (h w) c')
-        heatmap2_flatten = rearrange(self.heatmap_conv(heatmap2),
-                                     'n c h w -> n (h w) c')
-        prob_map1 = nn.functional.softmax(heatmap1_flatten *
-                                          self.softmax_temperature,
-                                          dim=1)
-        prob_map2 = nn.functional.softmax(heatmap2_flatten *
-                                          self.softmax_temperature,
-                                          dim=1)
-        coord_xy_map1 = self.generate_mesh_grid((hf1, wf1), stride=h1 // hf1)
-        coord_xy_map2 = self.generate_mesh_grid((hf2, wf2), stride=h2 // hf2)
-
-        box_cxy1 = (prob_map1 * coord_xy_map1).sum(1)
-        box_cxy2 = (prob_map2 * coord_xy_map2).sum(1)
-        tlbr1 = self.tlbr_reg(hs1).sigmoid().squeeze(1)
-        tlbr2 = self.tlbr_reg(hs2).sigmoid().squeeze(1)
-
-        pred_bbox_xyxy1 = box_tlbr_to_xyxy(box_cxy1,
-                                           tlbr1,
-                                           max_h=wh_scale1[1],
-                                           max_w=wh_scale1[0])
-        pred_bbox_xyxy2 = box_tlbr_to_xyxy(box_cxy2,
-                                           tlbr2,
-                                           max_h=wh_scale2[1],
-                                           max_w=wh_scale2[0])
-
-        return pred_bbox_xyxy1, pred_bbox_xyxy2
-
-    # Trainning pipeline
-    def forward(self, data, validation=False):
-        N, h1, w1, _ = data['image1'][data['overlap_valid']].shape
-        h2, w2 = data['image2'][data['overlap_valid']].shape[1:3]
-
-        feat1 = self.backbone(data['image1'][data['overlap_valid']])
-        feat2 = self.backbone(data['image2'][data['overlap_valid']])
-        feat1 = self.input_proj(feat1)
-        feat2 = self.input_proj(feat2)
 
         feat1 = self.patchmerging(feat1)
         feat2 = self.patchmerging(feat2)
@@ -183,18 +117,10 @@ class OETR(nn.Module):
 
         hf1, wf1 = feat1.shape[2:]
         hf2, wf2 = feat2.shape[2:]
-        wh_scale1 = torch.tensor([w1, h1], device=feat1.device)
-        wh_scale2 = torch.tensor([w2, h2], device=feat1.device)
 
         pos1 = self.pos_encoding(feat1)
         pos2 = self.pos_encoding(feat2)
 
-        # pdb.set_trace()
-        if 'resize_mask1' in data:
-            mask1 = data['resize_mask1'][data['overlap_valid']]
-            mask2 = data['resize_mask2'][data['overlap_valid']]
-        else:
-            mask1, mask2 = None, None
         hs1, hs2, memory1, memory2 = self.transformer(
             feat1,
             feat2,
@@ -245,33 +171,58 @@ class OETR(nn.Module):
 
         tlbr1 = self.tlbr_reg(hs1).sigmoid().squeeze(1)
         tlbr2 = self.tlbr_reg(hs2).sigmoid().squeeze(1)
+        return box_cxy1, tlbr1, box_cxy2, tlbr2
+
+    # Inference pipeline
+    def forward_dummy(self, image1, image2):
+        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
+            image1, image2)
+        h1, w1 = image1.shape[1:3]
+        h2, w2 = image2.shape[1:3]
+
+        pred_bbox_xyxy1 = box_tlbr_to_xyxy(box_cxy1, tlbr1, max_h=h1, max_w=w1)
+        pred_bbox_xyxy2 = box_tlbr_to_xyxy(box_cxy2, tlbr2, max_h=h2, max_w=w2)
+
+        return pred_bbox_xyxy1, pred_bbox_xyxy2
+
+    # Trainning pipeline
+    def forward(self, data, validation=False):
+        if 'resize_mask1' in data:
+            mask1 = data['resize_mask1'][data['overlap_valid']]
+            mask2 = data['resize_mask2'][data['overlap_valid']]
+        else:
+            mask1, mask2 = None, None
+        h1, w1 = data['image1'][data['overlap_valid']].shape[1:3]
+        h2, w2 = data['image2'][data['overlap_valid']].shape[1:3]
+        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
+            data['image1'][data['overlap_valid']],
+            data['image2'][data['overlap_valid']],
+            mask1,
+            mask2,
+        )
 
         # Groundtruth
         gt_bbox_xyxy1 = data['overlap_box1'][data['overlap_valid']]
         gt_bbox_xyxy2 = data['overlap_box2'][data['overlap_valid']]
-        gt_bbox_cxywh1 = box_xyxy_to_cxywh(gt_bbox_xyxy1,
-                                           max_h=wh_scale1[1],
-                                           max_w=wh_scale1[0])
-        gt_bbox_cxywh2 = box_xyxy_to_cxywh(gt_bbox_xyxy2,
-                                           max_h=wh_scale2[1],
-                                           max_w=wh_scale2[0])
+        gt_bbox_cxywh1 = box_xyxy_to_cxywh(gt_bbox_xyxy1, max_h=h1, max_w=w1)
+        gt_bbox_cxywh2 = box_xyxy_to_cxywh(gt_bbox_xyxy2, max_h=h2, max_w=w2)
 
         # Prediction
         pred_bbox_xyxy1 = torch.stack(
             [
-                box_cxy1[:, 0] - tlbr1[:, 1] * wh_scale1[0],
-                box_cxy1[:, 1] - tlbr1[:, 0] * wh_scale1[1],
-                box_cxy1[:, 0] + tlbr1[:, 3] * wh_scale1[0],
-                box_cxy1[:, 1] + tlbr1[:, 2] * wh_scale1[1],
+                box_cxy1[:, 0] - tlbr1[:, 1] * w1,
+                box_cxy1[:, 1] - tlbr1[:, 0] * h1,
+                box_cxy1[:, 0] + tlbr1[:, 3] * w1,
+                box_cxy1[:, 1] + tlbr1[:, 2] * h1,
             ],
             dim=1,
         )
         pred_bbox_xyxy2 = torch.stack(
             [
-                box_cxy2[:, 0] - tlbr2[:, 1] * wh_scale2[0],
-                box_cxy2[:, 1] - tlbr2[:, 0] * wh_scale2[1],
-                box_cxy2[:, 0] + tlbr2[:, 3] * wh_scale2[0],
-                box_cxy2[:, 1] + tlbr2[:, 2] * wh_scale2[1],
+                box_cxy2[:, 0] - tlbr2[:, 1] * w2,
+                box_cxy2[:, 1] - tlbr2[:, 0] * h2,
+                box_cxy2[:, 0] + tlbr2[:, 3] * w2,
+                box_cxy2[:, 1] + tlbr2[:, 2] * h2,
             ],
             dim=1,
         )
@@ -289,7 +240,8 @@ class OETR(nn.Module):
             ],
             dim=-1,
         )
-
+        wh_scale1 = torch.tensor([w1, h1], device=mask1.device)
+        wh_scale2 = torch.tensor([w2, h2], device=mask1.device)
         # Localization loss
         loc_l1_loss = F.l1_loss(
             pred_bbox_cxywh1[:, :2] / wh_scale1,

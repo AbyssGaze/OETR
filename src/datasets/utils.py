@@ -18,6 +18,7 @@ from PIL import Image
 
 
 def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
+    """Plot image pairs with plt figure."""
     n = len(imgs)
     assert n == 2, 'number of images must be two'
     figsize = (size * n, size * 3 / 4) if size is not None else None
@@ -330,6 +331,7 @@ def statistics_image_pairs(pairs_list_path, dataset_path):
             print(image1.shape, image2.shape)
 
 
+# Main pipeline
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate megadepth image pairs',
