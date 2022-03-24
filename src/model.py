@@ -143,6 +143,7 @@ class OETR(nn.Module):
         att2 = torch.einsum('blc, bnc->bln', memory2, hs2)
 
         # pdb.set_trace()
+        # weighted sum for center regression
         heatmap1 = rearrange(memory1 * att1,
                              'n (h w) c -> n c h w',
                              h=hf1,
@@ -157,6 +158,7 @@ class OETR(nn.Module):
         heatmap2_flatten = (
             rearrange(self.heatmap_conv(heatmap2), 'n c h w -> n (h w) c') *
             self.softmax_temperature)
+
         if mask1 is not None:
             heatmap1_flatten.masked_fill_(~mask1.flatten(1)[..., None].bool(),
                                           -INF)
