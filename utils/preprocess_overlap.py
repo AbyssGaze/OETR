@@ -297,7 +297,7 @@ def main(
         if i % 10 != 0:
             continue
 
-        box1, valid_uv1, box2, valid_uv2 = numpy_overlap_box(
+        box1, valid_uv1, box2, valid_uv2, bbox_valid = numpy_overlap_box(
             batch['intrinsics1'][0].numpy(),
             batch['depth1'][0].numpy(),
             batch['pose1'][0].numpy(),
@@ -309,18 +309,19 @@ def main(
             batch['bbox2'][0].numpy(),
             batch['ratio2'][0].numpy(),
         )
-        # Visualization groundtruth
-        visualize_box(
-            batch['image0'][0] * 255,
-            box1,
-            valid_uv1,
-            batch['depth1'][0],
-            batch['image1'][0] * 255,
-            box2,
-            valid_uv2,
-            batch['depth2'][0],
-            batch['file_name'][0],
-        )
+        if bbox_valid:
+            # Visualization groundtruth
+            visualize_box(
+                batch['image0'][0] * 255,
+                box1,
+                valid_uv1,
+                batch['depth1'][0],
+                batch['image1'][0] * 255,
+                box2,
+                valid_uv2,
+                batch['depth2'][0],
+                batch['file_name'][0],
+            )
 
 
 if __name__ == '__main__':

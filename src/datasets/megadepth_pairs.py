@@ -68,14 +68,6 @@ class MegaDepthPairsDataset(Dataset):
         self.total_dataset = []
         self.init_dataset()
 
-    def overlap_box(self, K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
-                    bbox2, ratio2):
-        box1, mask1, box2, mask2 = numpy_overlap_box(K1, depth1, pose1, bbox1,
-                                                     ratio1, K2, depth2, pose2,
-                                                     bbox2, ratio2)
-
-        return box1, box2, mask1, mask2, True
-
     def init_dataset(self):
         """init datasets from preprocessed data, output relative directory and
         geometry info."""
@@ -169,7 +161,7 @@ class MegaDepthPairsDataset(Dataset):
             overlap_mask1,
             overlap_mask2,
             overlap_valid,
-        ) = self.overlap_box(
+        ) = numpy_overlap_box(
             intrinsics1,
             depth1,
             pose1,

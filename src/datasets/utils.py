@@ -177,17 +177,29 @@ def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
 
     valid_uv1 = np.stack((u1[valid_corners], v1[valid_corners])).astype(int)
     valid_uv2 = uv2[:, valid_corners].astype(int)
+
     # depth validation
     Z2 = depth2[valid_uv2[1], valid_uv2[0]]
     inlier_mask = np.absolute(XYZ2[2, valid_corners] - Z2) < 0.5
 
     valid_uv1 = valid_uv1[:, inlier_mask]
     valid_uv2 = valid_uv2[:, inlier_mask]
+
+    if valid_uv1.shape[1] == 0 or valid_uv2.shape[1] == 0:
+        return (
+            np.array([0] * 4),
+            np.array([0] * 4),
+            np.zeros((h, w)),
+            np.zeros((h, w)),
+            False,
+        )
+    # box with x1, y1, x2, y2
     box1 = get_boxes(valid_uv1)
     box2 = get_boxes(valid_uv2)
+    # mask
     mask1 = get_maskes(valid_uv1, h, w)
     mask2 = get_maskes(valid_uv2, h, w)
-    return box1, mask1, box2, mask2
+    return box1, mask1, box2, mask2, True
 
 
 def crop(image1, image2, central_match, image_size):

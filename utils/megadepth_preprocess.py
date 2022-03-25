@@ -183,7 +183,7 @@ def process_scene(
             depth1 = np.array(hdf5_file['/depth'])
 
         # bbox0, bbox1 = overlap_box(K0, depth0, pose0, K1, depth1, pose1)
-        bbox0, _, bbox1, _ = numpy_overlap_box(
+        bbox0, _, bbox1, _, bbox_valid = numpy_overlap_box(
             K0,
             depth0,
             pose0,
@@ -196,8 +196,8 @@ def process_scene(
             np.array([1.0, 1.0]),
         )
 
-        if (bbox0.max() > 0 and bbox1.max() > 0
-                and scale_diff(bbox0, bbox1, depth0, depth1) > 2):
+        if bbox_valid and (bbox0.max() > 0 and bbox1.max() > 0
+                           and scale_diff(bbox0, bbox1, depth0, depth1) > 2):
             K0 = ','.join(map(str, K0.reshape(-1)))
             K1 = ','.join(map(str, K1.reshape(-1)))
             pose0 = ','.join(map(str, pose0.reshape(-1)))
