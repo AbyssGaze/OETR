@@ -23,49 +23,49 @@ def boxes(points):
     return box
 
 
-def overlap_box(K1, depth1, pose1, K2, depth2, pose2):
-    mask1 = np.where(depth1 > 0)
-    u1, v1 = mask1[1], mask1[0]
-    Z1 = depth1[v1, u1]
+# def overlap_box(K1, depth1, pose1, K2, depth2, pose2):
+#     mask1 = np.where(depth1 > 0)
+#     u1, v1 = mask1[1], mask1[0]
+#     Z1 = depth1[v1, u1]
 
-    # COLMAP convention
-    X1 = (u1 - K1[0, 2]) * (Z1 / K1[0, 0])
-    Y1 = (v1 - K1[1, 2]) * (Z1 / K1[1, 1])
-    XYZ1_hom = np.concatenate(
-        [
-            X1.reshape(1, -1),
-            Y1.reshape(1, -1),
-            Z1.reshape(1, -1),
-            np.ones_like(Z1.reshape(1, -1)),
-        ],
-        axis=0,
-    )
-    XYZ2_hom = pose2 @ np.linalg.inv(pose1) @ XYZ1_hom
-    XYZ2 = XYZ2_hom[:-1, :] / XYZ2_hom[-1, :].reshape(1, -1)
+#     # COLMAP convention
+#     X1 = (u1 - K1[0, 2]) * (Z1 / K1[0, 0])
+#     Y1 = (v1 - K1[1, 2]) * (Z1 / K1[1, 1])
+#     XYZ1_hom = np.concatenate(
+#         [
+#             X1.reshape(1, -1),
+#             Y1.reshape(1, -1),
+#             Z1.reshape(1, -1),
+#             np.ones_like(Z1.reshape(1, -1)),
+#         ],
+#         axis=0,
+#     )
+#     XYZ2_hom = pose2 @ np.linalg.inv(pose1) @ XYZ1_hom
+#     XYZ2 = XYZ2_hom[:-1, :] / XYZ2_hom[-1, :].reshape(1, -1)
 
-    uv2_hom = K2 @ XYZ2
-    uv2 = uv2_hom[:-1, :] / uv2_hom[-1, :].reshape(1, -1)
-    h, w = depth2.shape
-    i = uv2[0, :].astype(int)
-    j = uv2[1, :].astype(int)
+#     uv2_hom = K2 @ XYZ2
+#     uv2 = uv2_hom[:-1, :] / uv2_hom[-1, :].reshape(1, -1)
+#     h, w = depth2.shape
+#     i = uv2[0, :].astype(int)
+#     j = uv2[1, :].astype(int)
 
-    valid_corners = np.logical_and(np.logical_and(i >= 0, j >= 0),
-                                   np.logical_and(i < w, j < h))
+#     valid_corners = np.logical_and(np.logical_and(i >= 0, j >= 0),
+#                                    np.logical_and(i < w, j < h))
 
-    valid_uv1 = np.stack((u1[valid_corners], v1[valid_corners])).astype(int)
-    valid_uv2 = uv2[:, valid_corners].astype(int)
-    # depth validation
-    Z2 = depth2[valid_uv2[1], valid_uv2[0]]
-    inlier_mask = np.absolute(XYZ2[2, valid_corners] - Z2) < 0.5
+#     valid_uv1 = np.stack((u1[valid_corners], v1[valid_corners])).astype(int)
+#     valid_uv2 = uv2[:, valid_corners].astype(int)
+#     # depth validation
+#     Z2 = depth2[valid_uv2[1], valid_uv2[0]]
+#     inlier_mask = np.absolute(XYZ2[2, valid_corners] - Z2) < 0.5
 
-    valid_uv1 = valid_uv1[:, inlier_mask]
-    valid_uv2 = valid_uv2[:, inlier_mask]
-    if valid_uv1.shape[1] == 0 or valid_uv2.shape[1] == 0:
-        return np.array([0] * 4), np.array([0] * 4)
+#     valid_uv1 = valid_uv1[:, inlier_mask]
+#     valid_uv2 = valid_uv2[:, inlier_mask]
+#     if valid_uv1.shape[1] == 0 or valid_uv2.shape[1] == 0:
+#         return np.array([0] * 4), np.array([0] * 4)
 
-    box1 = boxes(valid_uv1)
-    box2 = boxes(valid_uv2)
-    return box1, box2
+#     box1 = boxes(valid_uv1)
+#     box2 = boxes(valid_uv2)
+#     return box1, box2
 
 
 def scale_diff(bbox0, bbox1, depth0, depth1):
