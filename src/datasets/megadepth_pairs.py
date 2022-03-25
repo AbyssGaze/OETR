@@ -157,8 +157,8 @@ class MegaDepthPairsDataset(Dataset):
 
         (
             overlap_box1,
-            overlap_box2,
             overlap_mask1,
+            overlap_box2,
             overlap_mask2,
             overlap_valid,
         ) = numpy_overlap_box(
