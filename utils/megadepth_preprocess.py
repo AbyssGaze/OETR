@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   megadepth.py
 @Time    :   2021/06/21 17:13:41
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 
 import argparse
 import os
@@ -13,6 +13,8 @@ from multiprocessing import Pool
 
 import h5py
 import numpy as np
+
+from src.datasets.utils import numpy_overlap_box
 
 
 def boxes(points):
@@ -75,10 +77,14 @@ def scale_diff(bbox0, bbox1, depth0, depth1):
     Returns:
         scale_dirff(float): the max difference in width and height
     """
-    w_diff = max((bbox0[2] - bbox0[0]) / (bbox1[2] - bbox1[0]),
-                 (bbox1[2] - bbox1[0]) / (bbox0[2] - bbox0[0]))
-    h_diff = max((bbox0[3] - bbox0[1]) / (bbox1[3] - bbox1[1]),
-                 (bbox1[3] - bbox1[1]) / (bbox0[3] - bbox0[1]))
+    w_diff = max(
+        (bbox0[2] - bbox0[0]) / (bbox1[2] - bbox1[0]),
+        (bbox1[2] - bbox1[0]) / (bbox0[2] - bbox0[0]),
+    )
+    h_diff = max(
+        (bbox0[3] - bbox0[1]) / (bbox1[3] - bbox1[1]),
+        (bbox1[3] - bbox1[1]) / (bbox0[3] - bbox0[1]),
+    )
     # image_h_scale = max(depth0.shape[0]/(bbox0[3] - bbox0[1]),
     #                     depth1.shape[0]/(bbox1[3] - bbox1[1]))
     # image_w_scale = max(depth0.shape[1]/(bbox0[2] - bbox0[0]),
@@ -103,13 +109,15 @@ def get_existed_pairs(path):
     return existed_pairs
 
 
-def process_scene(scene,
-                  datasets,
-                  pairs_per_scene=3000,
-                  existed_pairs=[],
-                  min_overlap_ratio=0.1,
-                  max_overlap_ratio=0.7,
-                  max_scale_ratio=100):
+def process_scene(
+    scene,
+    datasets,
+    pairs_per_scene=3000,
+    existed_pairs=[],
+    min_overlap_ratio=0.1,
+    max_overlap_ratio=0.7,
+    max_scale_ratio=100,
+):
     """Preprocess scene to txt to accelerate training.
 
     Args:
@@ -174,10 +182,22 @@ def process_scene(scene,
         with h5py.File(depth_path1, 'r') as hdf5_file:
             depth1 = np.array(hdf5_file['/depth'])
 
-        bbox0, bbox1 = overlap_box(K0, depth0, pose0, K1, depth1, pose1)
+        # bbox0, bbox1 = overlap_box(K0, depth0, pose0, K1, depth1, pose1)
+        bbox0, _, bbox1, _ = numpy_overlap_box(
+            K0,
+            depth0,
+            pose0,
+            np.array([0.0, 0.0]),
+            np.array([1.0, 1.0]),
+            K1,
+            depth1,
+            pose1,
+            np.array([0.0, 0.0]),
+            np.array([1.0, 1.0]),
+        )
 
-        if bbox0.max() > 0 and bbox1.max() > 0 and scale_diff(
-                bbox0, bbox1, depth0, depth1) > 2:
+        if (bbox0.max() > 0 and bbox1.max() > 0
+                and scale_diff(bbox0, bbox1, depth0, depth1) > 2):
             K0 = ','.join(map(str, K0.reshape(-1)))
             K1 = ','.join(map(str, K1.reshape(-1)))
             pose0 = ','.join(map(str, pose0.reshape(-1)))
@@ -185,8 +205,17 @@ def process_scene(scene,
             bbox0 = ','.join(map(str, bbox0.reshape(-1)))
             bbox1 = ','.join(map(str, bbox1.reshape(-1)))
             info = '{} {} {} {} {} {} {} {} {} {}\n'.format(
-                image_paths[idx0], depth_paths[idx0], K0, pose0, bbox0,
-                image_paths[idx1], depth_paths[idx1], K1, pose1, bbox1)
+                image_paths[idx0],
+                depth_paths[idx0],
+                K0,
+                pose0,
+                bbox0,
+                image_paths[idx1],
+                depth_paths[idx1],
+                K1,
+                pose1,
+                bbox1,
+            )
             data += info
             valid += 1
         if valid == pairs_per_scene:
@@ -197,20 +226,27 @@ def process_scene(scene,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate megadepth image pairs',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    parser.add_argument('--scenes',
-                        type=str,
-                        default='assets/megadepth/validation.txt',
-                        help='Path to the list of scenes')
-    parser.add_argument('--datasets',
-                        type=str,
-                        default='assets/megadepth/',
-                        help='Path to the list of image pairs')
-    parser.add_argument('--input_pairs',
-                        type=str,
-                        default='assets/megadepth/megadepth_0.4.txt',
-                        help='Path to the list of image pairs')
+    parser.add_argument(
+        '--scenes',
+        type=str,
+        default='assets/megadepth/validation.txt',
+        help='Path to the list of scenes',
+    )
+    parser.add_argument(
+        '--datasets',
+        type=str,
+        default='assets/megadepth/',
+        help='Path to the list of image pairs',
+    )
+    parser.add_argument(
+        '--input_pairs',
+        type=str,
+        default='assets/megadepth/megadepth_0.4.txt',
+        help='Path to the list of image pairs',
+    )
     parser.add_argument('--max_overlap_ratio',
                         type=float,
                         default=0.7,
@@ -229,7 +265,8 @@ if __name__ == '__main__':
         pool.apply_async(
             process_scene,
             (scene, opt.datasets, opt.pairs_per_scene, existed_pairs),
-            callback=megadepth_callback)
+            callback=megadepth_callback,
+        )
 
     pool.close()
     pool.join()

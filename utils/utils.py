@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   utils.py
 @Time    :   2021/06/29 21:07:53
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 
 import logging
 
@@ -76,7 +76,7 @@ def get_gpu_memory(name='', id=0):
 
 
 def process_resize(w, h, resize):
-    assert (len(resize) > 0 and len(resize) <= 2)
+    assert len(resize) > 0 and len(resize) <= 2
     if len(resize) == 1 and resize[0] > -1:
         scale = resize[0] / max(h, w)
         w_new, h_new = int(round(w * scale)), int(round(h * scale))
@@ -95,7 +95,7 @@ def process_resize(w, h, resize):
 
 
 def frame2tensor(frame, device):
-    return torch.from_numpy(frame / 255.).float()[None].to(device)
+    return torch.from_numpy(frame / 255.0).float()[None].to(device)
 
 
 def read_image(path, device, resize, rotation, resize_float):
@@ -129,7 +129,14 @@ def visualize_overlap(image1, bbox1, image2, bbox2, output):
     cv2.imwrite(output, viz)
 
 
-def visualize_overlap_gt(image1, bbox1, gt1, image2, bbox2, gt2, output):
+def visualize_overlap_gt(image1,
+                         bbox1,
+                         gt1,
+                         image2,
+                         bbox2,
+                         gt2,
+                         output,
+                         save=True):
 
     left = cv2.rectangle(image1, tuple(bbox1[0:2]), tuple(bbox1[2:]),
                          (255, 0, 0), 2)
@@ -138,21 +145,17 @@ def visualize_overlap_gt(image1, bbox1, gt1, image2, bbox2, gt2, output):
     left = cv2.rectangle(left, tuple(gt1[0:2]), tuple(gt1[2:]), (0, 255, 0), 2)
     right = cv2.rectangle(right, tuple(gt2[0:2]), tuple(gt2[2:]), (0, 255, 0),
                           2)
-
-    viz = cv2.hconcat([left, right])
-    cv2.imwrite(output, viz)
+    if save:
+        viz = cv2.hconcat([left, right])
+        cv2.imwrite(output, viz)
+    return left, right
 
 
 def visualize_centerness_overlap_gt(image1, bbox1, gt1, center1, image2, bbox2,
                                     gt2, center2, output):
 
-    left = cv2.rectangle(image1, tuple(bbox1[0:2]), tuple(bbox1[2:]),
-                         (255, 0, 0), 2)
-    right = cv2.rectangle(image2, tuple(bbox2[0:2]), tuple(bbox2[2:]),
-                          (0, 0, 255), 2)
-    left = cv2.rectangle(left, tuple(gt1[0:2]), tuple(gt1[2:]), (0, 255, 0), 2)
-    right = cv2.rectangle(right, tuple(gt2[0:2]), tuple(gt2[2:]), (0, 255, 0),
-                          2)
+    left, right = visualize_overlap_gt(image1, bbox1, gt1, image2, bbox2, gt2,
+                                       output, False)
     # from IPython import embed;embed()
     center1 = (center1 - center1.min()) / center1.max()
     center2 = (center2 - center2.min()) / center2.max()

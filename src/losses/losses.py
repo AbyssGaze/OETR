@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   losses.py
 @Time    :   2021/06/29 16:52:52
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 
 import cv2
 import numpy as np
@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from .utils import bbox_overlaps
+from .utils import bbox_oiou, bbox_overlaps
 
 
 class SigmoidFocalLoss(nn.Module):
@@ -105,17 +105,7 @@ def iou_loss(pred, target, eps=1e-6):
 
 
 def oiou_loss(pred, target, eps=1e-7):
-    # overlap
-    lt = torch.max(pred[:, :2], target[:, :2])
-    rb = torch.min(pred[:, 2:], target[:, 2:])
-    wh = (rb - lt).clamp(min=0)
-    overlap = wh[:, 0] * wh[:, 1]
-
-    # union
-    ap = (target[:, 2] - target[:, 0]) * (target[:, 3] - target[:, 1])
-
-    # IoU
-    ious = overlap / ap
+    ious = bbox_oiou(target, pred, eps)
     loss = 1 - ious
     return loss
 
@@ -193,10 +183,9 @@ class IoULoss(nn.Module):
                 Defaults to None. Options are "none", "mean" and "sum".
         """
         assert reduction_override in (None, 'none', 'mean', 'sum')
-        reduction = (reduction_override
-                     if reduction_override else self.reduction)
-        if (weight is not None) and (not torch.any(weight > 0)) and (
-                reduction != 'none'):
+        reduction = reduction_override if reduction_override else self.reduction
+        if ((weight is not None) and (not torch.any(weight > 0))
+                and (reduction != 'none')):
             return (pred * weight).sum()  # 0
         if weight is not None and weight.dim() > 1:
             # TODO: remove this in the future
@@ -271,9 +260,12 @@ class CycleOverlapLoss(nn.Module):
         )
         valid_box_xy = valid_depth_xy[valid]
         valid_box_xyz = torch.cat(
-            (valid_box_xy[:, [1, 0]],
-             depth[valid_box_xy[:, 0], valid_box_xy[:, 1]].reshape(-1, 1)),
-            dim=1)
+            (
+                valid_box_xy[:, [1, 0]],
+                depth[valid_box_xy[:, 0], valid_box_xy[:, 1]].reshape(-1, 1),
+            ),
+            dim=1,
+        )
         return valid_box_xyz.transpose(0, 1)
 
     def interpolate_depth(self, pos, depth):
@@ -367,8 +359,20 @@ class CycleOverlapLoss(nn.Module):
 
         return [interpolated_depth, pos, ids]
 
-    def warp(self, coord, K1, pose1, bbox1, ratio1, K2, depth2, pose2, bbox2,
-             ratio2, max_shape):
+    def warp(
+        self,
+        coord,
+        K1,
+        pose1,
+        bbox1,
+        ratio1,
+        K2,
+        depth2,
+        pose2,
+        bbox2,
+        ratio2,
+        max_shape,
+    ):
         u1 = (coord[0, :] + bbox1[1] + 0.5) / ratio1[1]
         v1 = (coord[1, :] + bbox1[0] + 0.5) / ratio1[0]
 
@@ -390,8 +394,8 @@ class CycleOverlapLoss(nn.Module):
         uv2_hom = torch.matmul(K2, XYZ2)
         uv2 = uv2_hom[:-1, :] / uv2_hom[-1, :].view(1, -1)
 
-        u2 = (uv2[0, :] * ratio2[1] - bbox2[1] - 0.5)
-        v2 = (uv2[1, :] * ratio2[0] - bbox2[0] - 0.5)
+        u2 = uv2[0, :] * ratio2[1] - bbox2[1] - 0.5
+        v2 = uv2[1, :] * ratio2[0] - bbox2[0] - 0.5
         uv2 = torch.cat([u2.view(1, -1), v2.view(1, -1)], dim=0)
         # depth check
         ann_z2, _, ids = self.interpolate_depth(uv2, depth2)
@@ -417,13 +421,27 @@ class CycleOverlapLoss(nn.Module):
 
     def visualize_warped(self, image, target, pred_bbox, warped_bbox, coord):
         viz = image.cpu().numpy() * 255
-        cv2.rectangle(viz, tuple(pred_bbox.detach().cpu().numpy()[0:2]),
-                      tuple(pred_bbox.detach().cpu().numpy()[2:]), (255, 0, 0),
-                      2)
-        cv2.rectangle(viz, tuple(warped_bbox.cpu().numpy()[0:2]),
-                      tuple(warped_bbox.cpu().numpy()[2:]), (0, 0, 255), 2)
-        cv2.rectangle(viz, tuple(target.cpu().numpy()[0:2]),
-                      tuple(target.cpu().numpy()[2:]), (0, 255, 0), 2)
+        cv2.rectangle(
+            viz,
+            tuple(pred_bbox.detach().cpu().numpy()[0:2]),
+            tuple(pred_bbox.detach().cpu().numpy()[2:]),
+            (255, 0, 0),
+            2,
+        )
+        cv2.rectangle(
+            viz,
+            tuple(warped_bbox.cpu().numpy()[0:2]),
+            tuple(warped_bbox.cpu().numpy()[2:]),
+            (0, 0, 255),
+            2,
+        )
+        cv2.rectangle(
+            viz,
+            tuple(target.cpu().numpy()[0:2]),
+            tuple(target.cpu().numpy()[2:]),
+            (0, 255, 0),
+            2,
+        )
         mask = np.zeros((image.shape), dtype=np.float32)
         for i in range(coord.shape[1]):
             mask = cv2.circle(mask, (coord[0, i], coord[1, i]), 1,
@@ -431,9 +449,20 @@ class CycleOverlapLoss(nn.Module):
         viz = cv2.addWeighted(viz, 0.7, mask, 0.3, 0)
         return viz
 
-    def visualize_pair(self, image1, target1, pred_bbox1, warped_bbox1, coord1,
-                       image2, target2, pred_bbox2, warped_bbox2, coord2,
-                       output):
+    def visualize_pair(
+        self,
+        image1,
+        target1,
+        pred_bbox1,
+        warped_bbox1,
+        coord1,
+        image2,
+        target2,
+        pred_bbox2,
+        warped_bbox2,
+        coord2,
+        output,
+    ):
         left = self.visualize_warped(image1, target1, pred_bbox1, warped_bbox1,
                                      coord1)
         right = self.visualize_warped(image2, target2, pred_bbox2,
@@ -441,9 +470,28 @@ class CycleOverlapLoss(nn.Module):
         viz = cv2.hconcat([left, right])
         cv2.imwrite('cycle_' + output, viz)
 
-    def forward(self, image1, target1, pred1, depth1, K1, pose1, bbox1, ratio1,
-                shape1, image2, target2, pred2, depth2, K2, pose2, bbox2,
-                ratio2, shape2, output):
+    def forward(
+        self,
+        image1,
+        target1,
+        pred1,
+        depth1,
+        K1,
+        pose1,
+        bbox1,
+        ratio1,
+        shape1,
+        image2,
+        target2,
+        pred2,
+        depth2,
+        K2,
+        pose2,
+        bbox2,
+        ratio2,
+        shape2,
+        output,
+    ):
         warped_bbox1 = []
         warped_bbox2 = []
         valid = torch.tensor([True] * pred1.shape[0])
@@ -453,12 +501,32 @@ class CycleOverlapLoss(nn.Module):
             if valid_box_xy1.shape[1] == 0 or valid_box_xy2.shape[1] == 0:
                 valid[i] = False
                 continue
-            coord2, warped2 = self.warp(valid_box_xy1, K1[i], pose1[i],
-                                        bbox1[i], ratio1[i], K2[i], depth2[i],
-                                        pose2[i], bbox2[i], ratio2[i], shape2)
-            coord1, warped1 = self.warp(valid_box_xy2, K2[i], pose2[i],
-                                        bbox2[i], ratio2[i], K1[i], depth1[i],
-                                        pose1[i], bbox1[i], ratio1[i], shape1)
+            coord2, warped2 = self.warp(
+                valid_box_xy1,
+                K1[i],
+                pose1[i],
+                bbox1[i],
+                ratio1[i],
+                K2[i],
+                depth2[i],
+                pose2[i],
+                bbox2[i],
+                ratio2[i],
+                shape2,
+            )
+            coord1, warped1 = self.warp(
+                valid_box_xy2,
+                K2[i],
+                pose2[i],
+                bbox2[i],
+                ratio2[i],
+                K1[i],
+                depth1[i],
+                pose1[i],
+                bbox1[i],
+                ratio1[i],
+                shape1,
+            )
             if coord1.shape[1] == 0 or coord2.shape[1] == 0:
                 valid[i] = False
                 continue

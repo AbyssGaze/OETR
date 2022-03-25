@@ -100,10 +100,10 @@ class OETR(nn.Module):
         nn.init.normal_(self.fc_reg.weight, 0, 0.001)
         nn.init.constant_(self.fc_reg.bias, 0)
 
-    def generate_mesh_grid(self, feat_hw, stride):
+    def generate_mesh_grid(self, feat_hw, stride, device='cpu'):
         """generate mesh grid with specific width, height and stride."""
-        coord_xy_map = (create_meshgrid(feat_hw[0], feat_hw[1], False,
-                                        self.device) + 0.5) * stride
+        coord_xy_map = (create_meshgrid(feat_hw[0], feat_hw[1], False, device)
+                        + 0.5) * stride
         return coord_xy_map.reshape(1, feat_hw[0] * feat_hw[1], 2)
 
     def offset_regression(self, image1, image2, mask1=None, mask2=None):
@@ -169,10 +169,11 @@ class OETR(nn.Module):
                                           dim=1)  # [N, hw, 1]
         prob_map2 = nn.functional.softmax(heatmap2_flatten, dim=1)
         coord_xy_map1 = self.generate_mesh_grid(
-            (hf1, wf1),
-            stride=h1 // hf1)  # [1, h*w, 2]   # .repeat(N, 1, 1, 1)
+            (hf1, wf1), stride=h1 // hf1,
+            device=feat1.device)  # [1, h*w, 2]   # .repeat(N, 1, 1, 1)
         coord_xy_map2 = self.generate_mesh_grid(
-            (hf2, wf2), stride=h2 // hf2)  # .repeat(N, 1, 1, 1)
+            (hf2, wf2), stride=h2 // hf2,
+            device=feat1.device)  # .repeat(N, 1, 1, 1)
 
         box_cxy1 = (prob_map1 * coord_xy_map1).sum(1)  # [N, 2]
         box_cxy2 = (prob_map2 * coord_xy_map2).sum(1)
@@ -248,8 +249,8 @@ class OETR(nn.Module):
             ],
             dim=-1,
         )
-        wh_scale1 = torch.tensor([w1, h1], device=mask1.device)
-        wh_scale2 = torch.tensor([w2, h2], device=mask1.device)
+        wh_scale1 = torch.tensor([w1, h1], device=data['image1'].device)
+        wh_scale2 = torch.tensor([w2, h2], device=data['image2'].device)
         # Localization loss
         loc_l1_loss = F.l1_loss(
             pred_bbox_cxywh1[:, :2] / wh_scale1,
