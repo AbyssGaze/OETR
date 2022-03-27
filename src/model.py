@@ -355,7 +355,7 @@ class OETR(nn.Module):
         # Using cycle consistency loss
         if self.cycle:
             box_cxy1from2, box_cxy2from1 = self.center_estimation(
-                hs1, hs2, memory1, memory2, hf1, wf1, hf2, wf2, mask1, mask2)
+                hs2, hs1, memory1, memory2, hf1, wf1, hf2, wf2, mask1, mask2)
             (
                 _,
                 _,
