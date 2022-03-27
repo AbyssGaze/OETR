@@ -106,10 +106,10 @@ class OETR(nn.Module):
                         + 0.5) * stride
         return coord_xy_map.reshape(1, feat_hw[0] * feat_hw[1], 2)
 
-    def offset_regression(self, image1, image2, mask1=None, mask2=None):
+    def feature_extraction(self, image1, image2, mask1=None, mask2=None):
         """forward image pairs overlap estimation."""
-        N, h1, w1, _ = image1.shape
-        h2, w2 = image2.shape[1:3]
+        # N, h1, w1, _ = image1.shape
+        # h2, w2 = image2.shape[1:3]
 
         feat1 = self.backbone(image1)
         feat2 = self.backbone(image2)
@@ -127,6 +127,9 @@ class OETR(nn.Module):
         pos1 = self.pos_encoding(feat1)
         pos2 = self.pos_encoding(feat2)
 
+        return feat1, feat2, pos1, pos2, hf1, wf1, hf2, wf2
+
+    def feature_correlation(self, feat1, feat2, pos1, pos2, mask1, mask2):
         hs1, hs2, memory1, memory2 = self.transformer(
             feat1,
             feat2,
@@ -137,12 +140,14 @@ class OETR(nn.Module):
             mask1,
             mask2,
         )
-        # TODO:image1/image2 attention control image2 regression
+        return hs1, hs2, memory1, memory2
+
+    def center_estimation(self, hs1, hs2, memory1, memory2, hf1, wf1, hf2, wf2,
+                          mask1, mask2):
         att1 = torch.einsum('blc, bnc->bln', memory1,
                             hs1)  # [N, hw, num_q]  num_q=1
         att2 = torch.einsum('blc, bnc->bln', memory2, hs2)
 
-        # pdb.set_trace()
         # weighted sum for center regression
         heatmap1 = rearrange(memory1 * att1,
                              'n (h w) c -> n c h w',
@@ -169,69 +174,38 @@ class OETR(nn.Module):
                                           dim=1)  # [N, hw, 1]
         prob_map2 = nn.functional.softmax(heatmap2_flatten, dim=1)
         coord_xy_map1 = self.generate_mesh_grid(
-            (hf1, wf1), stride=h1 // hf1,
-            device=feat1.device)  # [1, h*w, 2]   # .repeat(N, 1, 1, 1)
+            (hf1, wf1), stride=self.h1 // hf1,
+            device=memory1.device)  # [1, h*w, 2]   # .repeat(N, 1, 1, 1)
         coord_xy_map2 = self.generate_mesh_grid(
-            (hf2, wf2), stride=h2 // hf2,
-            device=feat1.device)  # .repeat(N, 1, 1, 1)
+            (hf2, wf2), stride=self.h2 // hf2,
+            device=memory2.device)  # .repeat(N, 1, 1, 1)
 
         box_cxy1 = (prob_map1 * coord_xy_map1).sum(1)  # [N, 2]
         box_cxy2 = (prob_map2 * coord_xy_map2).sum(1)
 
+        return box_cxy1, box_cxy2
+
+    def size_regression(self, hs1, hs2):
         tlbr1 = self.tlbr_reg(hs1).sigmoid().squeeze(1)
         tlbr2 = self.tlbr_reg(hs2).sigmoid().squeeze(1)
-        return box_cxy1, tlbr1, box_cxy2, tlbr2
+        return tlbr1, tlbr2
 
-    # Inference pipeline
-    def forward_dummy(self, image1, image2):
-        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
-            image1, image2)
-        h1, w1 = image1.shape[1:3]
-        h2, w2 = image2.shape[1:3]
-
-        pred_bbox_xyxy1 = box_tlbr_to_xyxy(box_cxy1, tlbr1, max_h=h1, max_w=w1)
-        pred_bbox_xyxy2 = box_tlbr_to_xyxy(box_cxy2, tlbr2, max_h=h2, max_w=w2)
-
-        return pred_bbox_xyxy1, pred_bbox_xyxy2
-
-    # Trainning pipeline
-    def forward(self, data, validation=False):
-        if 'resize_mask1' in data:
-            mask1 = data['resize_mask1'][data['overlap_valid']]
-            mask2 = data['resize_mask2'][data['overlap_valid']]
-        else:
-            mask1, mask2 = None, None
-        h1, w1 = data['image1'][data['overlap_valid']].shape[1:3]
-        h2, w2 = data['image2'][data['overlap_valid']].shape[1:3]
-        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
-            data['image1'][data['overlap_valid']],
-            data['image2'][data['overlap_valid']],
-            mask1,
-            mask2,
-        )
-
-        # Groundtruth
-        gt_bbox_xyxy1 = data['overlap_box1'][data['overlap_valid']]
-        gt_bbox_xyxy2 = data['overlap_box2'][data['overlap_valid']]
-        gt_bbox_cxywh1 = box_xyxy_to_cxywh(gt_bbox_xyxy1, max_h=h1, max_w=w1)
-        gt_bbox_cxywh2 = box_xyxy_to_cxywh(gt_bbox_xyxy2, max_h=h2, max_w=w2)
-
-        # Prediction
+    def obtain_overlap_bbox(self, box_cxy1, tlbr1, box_cxy2, tlbr2):
         pred_bbox_xyxy1 = torch.stack(
             [
-                box_cxy1[:, 0] - tlbr1[:, 1] * w1,
-                box_cxy1[:, 1] - tlbr1[:, 0] * h1,
-                box_cxy1[:, 0] + tlbr1[:, 3] * w1,
-                box_cxy1[:, 1] + tlbr1[:, 2] * h1,
+                box_cxy1[:, 0] - tlbr1[:, 1] * self.w1,
+                box_cxy1[:, 1] - tlbr1[:, 0] * self.h1,
+                box_cxy1[:, 0] + tlbr1[:, 3] * self.w1,
+                box_cxy1[:, 1] + tlbr1[:, 2] * self.h1,
             ],
             dim=1,
         )
         pred_bbox_xyxy2 = torch.stack(
             [
-                box_cxy2[:, 0] - tlbr2[:, 1] * w2,
-                box_cxy2[:, 1] - tlbr2[:, 0] * h2,
-                box_cxy2[:, 0] + tlbr2[:, 3] * w2,
-                box_cxy2[:, 1] + tlbr2[:, 2] * h2,
+                box_cxy2[:, 0] - tlbr2[:, 1] * self.w2,
+                box_cxy2[:, 1] - tlbr2[:, 0] * self.h2,
+                box_cxy2[:, 0] + tlbr2[:, 3] * self.w2,
+                box_cxy2[:, 1] + tlbr2[:, 2] * self.h2,
             ],
             dim=1,
         )
@@ -249,6 +223,79 @@ class OETR(nn.Module):
             ],
             dim=-1,
         )
+        return pred_bbox_xyxy1, pred_bbox_xyxy2, pred_bbox_cxywh1, pred_bbox_cxywh2
+
+    # Inference pipeline
+    def forward_dummy(self, image1, image2, mask1=None, mask2=None):
+        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
+            image1, image2)
+        h1, w1 = image1.shape[1:3]
+        h2, w2 = image2.shape[1:3]
+        self.h1, self.w1 = h1, w1
+        self.h2, self.w2 = h2, w2
+
+        # feature extraction
+        feat1, feat2, pos1, pos2, hf1, wf1, hf2, wf2 = self.feature_extraction(
+            image1, image2, mask1, mask2)
+
+        # feature correlation
+        hs1, hs2, memory1, memory2 = self.feature_correlation(
+            feat1, feat2, pos1, pos2, mask1, mask2)
+
+        # overlap regression
+        box_cxy1, box_cxy2 = self.center_estimation(hs1, hs2, memory1, memory2,
+                                                    hf1, wf1, hf2, wf2, mask1,
+                                                    mask2)
+        tlbr1, tlbr2 = self.size_regression(hs1, hs2)
+
+        pred_bbox_xyxy1 = box_tlbr_to_xyxy(box_cxy1, tlbr1, max_h=h1, max_w=w1)
+        pred_bbox_xyxy2 = box_tlbr_to_xyxy(box_cxy2, tlbr2, max_h=h2, max_w=w2)
+
+        return pred_bbox_xyxy1, pred_bbox_xyxy2
+
+    # Trainning pipeline
+    def forward(self, data, validation=False):
+        if 'resize_mask1' in data:
+            mask1 = data['resize_mask1'][data['overlap_valid']]
+            mask2 = data['resize_mask2'][data['overlap_valid']]
+        else:
+            mask1, mask2 = None, None
+        h1, w1 = data['image1'][data['overlap_valid']].shape[1:3]
+        h2, w2 = data['image2'][data['overlap_valid']].shape[1:3]
+        self.h1, self.w1 = h1, w1
+        self.h2, self.w2 = h2, w2
+
+        # feature extraction
+        feat1, feat2, pos1, pos2, hf1, wf1, hf2, wf2 = self.feature_extraction(
+            data['image1'][data['overlap_valid']],
+            data['image2'][data['overlap_valid']],
+            mask1,
+            mask2,
+        )
+
+        # feature correlation
+        hs1, hs2, memory1, memory2 = self.feature_correlation(
+            feat1, feat2, pos1, pos2, mask1, mask2)
+
+        # overlap regression
+        box_cxy1, box_cxy2 = self.center_estimation(hs1, hs2, memory1, memory2,
+                                                    hf1, wf1, hf2, wf2, mask1,
+                                                    mask2)
+        tlbr1, tlbr2 = self.size_regression(hs1, hs2)
+
+        (
+            pred_bbox_xyxy1,
+            pred_bbox_xyxy2,
+            pred_bbox_cxywh1,
+            pred_bbox_cxywh2,
+        ) = self.obtain_overlap_bbox(box_cxy1, tlbr1, box_cxy2, tlbr2)
+
+        # Groundtruth
+        gt_bbox_xyxy1 = data['overlap_box1'][data['overlap_valid']]
+        gt_bbox_xyxy2 = data['overlap_box2'][data['overlap_valid']]
+        gt_bbox_cxywh1 = box_xyxy_to_cxywh(gt_bbox_xyxy1, max_h=h1, max_w=w1)
+        gt_bbox_cxywh2 = box_xyxy_to_cxywh(gt_bbox_xyxy2, max_h=h2, max_w=w2)
+
         wh_scale1 = torch.tensor([w1, h1], device=data['image1'].device)
         wh_scale2 = torch.tensor([w2, h2], device=data['image2'].device)
         # Localization loss
@@ -304,29 +351,28 @@ class OETR(nn.Module):
             'oiou1': oiou1,
             'oiou2': oiou2,
         }
+
         # Using cycle consistency loss
         if self.cycle:
-            cycle_loss = self.cycle_loss(
-                data['image1'][data['overlap_valid']],
-                data['overlap_box1'][data['overlap_valid']],
-                pred_bbox_xyxy1,
-                data['depth1'][data['overlap_valid']],
-                data['intrinsics1'][data['overlap_valid']],
-                data['pose1'][data['overlap_valid']],
-                data['bbox1'][data['overlap_valid']],
-                data['ratio1'][data['overlap_valid']],
-                data['image1'].shape[1:3],
-                data['image2'][data['overlap_valid']],
-                data['overlap_box2'][data['overlap_valid']],
-                pred_bbox_xyxy2,
-                data['depth2'][data['overlap_valid']],
-                data['intrinsics2'][data['overlap_valid']],
-                data['pose2'][data['overlap_valid']],
-                data['bbox2'][data['overlap_valid']],
-                data['ratio2'][data['overlap_valid']],
-                data['image2'].shape[1:3],
-                data['file_name'],
+            box_cxy1from2, box_cxy2from1 = self.center_estimation(
+                hs1, hs2, memory1, memory2, hf1, wf1, hf2, wf2, mask1, mask2)
+            (
+                _,
+                _,
+                pred_bbox_cxywh1from2,
+                pred_bbox_cxywh2from1,
+            ) = self.obtain_overlap_bbox(box_cxy1from2, tlbr1, box_cxy2from1,
+                                         tlbr2)
+            cycle_loss = F.l1_loss(
+                pred_bbox_cxywh1from2[:, :2] / wh_scale1,
+                gt_bbox_cxywh1[:, :2] / wh_scale1,
+                reduction='mean',
+            ) + F.l1_loss(
+                pred_bbox_cxywh2from1[:, :2] / wh_scale2,
+                gt_bbox_cxywh2[:, :2] / wh_scale2,
+                reduction='mean',
             )
+
             results['cycle_loss'] = cycle_loss.mean()
 
         return results
