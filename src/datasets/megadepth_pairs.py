@@ -212,15 +212,17 @@ def main(pairs_list_path, dataset_path, batch_size, num_workers):
         pairs_list_path=pairs_list_path,
         scene_info_path=os.path.join(dataset_path, 'scene_info'),
         base_path=dataset_path,
-        train=False,
-        pairs_per_scene=100,
+        train=True,
+        pairs_per_scene=12800,
     )
+
     dataset.build_dataset()
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=batch_size,
                                              num_workers=num_workers,
                                              shuffle=False)
     for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+        continue
         if i % 10:
             continue
         # Visualization datasets

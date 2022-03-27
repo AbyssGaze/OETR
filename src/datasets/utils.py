@@ -188,8 +188,8 @@ def numpy_overlap_box(K1, depth1, pose1, bbox1, ratio1, K2, depth2, pose2,
     if valid_uv1.shape[1] == 0 or valid_uv2.shape[1] == 0:
         return (
             np.array([0] * 4),
-            np.array([0] * 4),
             np.zeros((h, w)),
+            np.array([0] * 4),
             np.zeros((h, w)),
             False,
         )
