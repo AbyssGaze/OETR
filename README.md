@@ -1,4 +1,5 @@
 # Guide Local Feature Matching by Overlap Estimation
+> update: The training part of the code has been in the open-source review process of the department on 3.29, and it will take a certain amount of time to review it. After the director's approval, the open-source will be completed as soon as possible. 
 
 > update: Since our code open source requires review and related patent support, we need to complete the application for the relevant process. After completing the submission of eccv2022, we will go all out to complete the various processes required for open source, and it is expected that the open source will be completed around April 1. Thank you.
 > arxiv link: https://arxiv.org/abs/2202.09050
