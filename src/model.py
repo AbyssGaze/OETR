@@ -227,8 +227,6 @@ class OETR(nn.Module):
 
     # Inference pipeline
     def forward_dummy(self, image1, image2, mask1=None, mask2=None):
-        box_cxy1, tlbr1, box_cxy2, tlbr2 = self.offset_regression(
-            image1, image2)
         h1, w1 = image1.shape[1:3]
         h2, w2 = image2.shape[1:3]
         self.h1, self.w1 = h1, w1

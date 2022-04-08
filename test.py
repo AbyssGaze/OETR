@@ -15,7 +15,7 @@ import torch
 
 from src.config.default import get_cfg_defaults
 from src.model import OETR
-from utils.utils import read_image, visualize_overlap, visualize_overlap_gt
+from src.utils.utils import read_image, visualize_overlap, visualize_overlap_gt
 
 torch.set_grad_enabled(False)
 

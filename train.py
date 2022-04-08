@@ -20,9 +20,10 @@ from torch.utils.tensorboard import SummaryWriter
 from src.config.default import get_cfg_defaults
 from src.datasets import build_dataloader
 from src.model import build_detectors
-from utils.utils import (get_logger, loss_info,
-                         visualize_centerness_overlap_gt, visualize_overlap_gt)
-from utils.validation import evaluate
+from src.utils.utils import (get_logger, loss_info,
+                             visualize_centerness_overlap_gt,
+                             visualize_overlap_gt)
+from src.utils.validation import evaluate
 
 # os.environ["OMP_NUM_THREADS"] = "1"
 # seed = 42
