@@ -61,6 +61,7 @@ def process(
     overlap_scales1,
     dataset_name='googleurban',
     overlap=True,
+    warp_origin=True,
 ):
     """main process of match pipeline with overlap estimation.
 
@@ -119,7 +120,7 @@ def process(
         ratio1 = pred['ratio1']
     pred = dict((k, v[0].cpu().numpy()) for k, v in pred.items())
     # pred = dict((k, v[0].cpu().numpy()) for k, v in pred.items() if "ratio" not in k)
-    if 'ratio0' in pred and 0:
+    if 'ratio0' in pred and warp_origin:
         kpts0 = (pred['keypoints0'] / ratio0.cpu().numpy() +
                  pred['bbox0'][:2]) * scales0
         kpts1 = (pred['keypoints1'] / ratio1.cpu().numpy() +
@@ -164,27 +165,14 @@ def preprocess_overlap_pipeline(
     pair,
     matching,
     with_desc=False,
+    warp_origin=True,
 ):
     image0, overlap_inp0, inp0, scales0, overlap_scales0 = read_overlap_image(
-        os.path.join(input, name0),
-        device,
-        resize,
-        0,
-        resize_float,
-        gray,
-        align,
-        True,
-    )
+        os.path.join(input, name0), device, resize, 0, resize_float, gray,
+        align, True)
     image1, overlap_inp1, inp1, scales1, overlap_scales1 = read_overlap_image(
-        os.path.join(input, name1),
-        device,
-        resize,
-        0,
-        resize_float,
-        gray,
-        align,
-        True,
-    )
+        os.path.join(input, name1), device, resize, 0, resize_float, gray,
+        align, True)
     if image0 is None or image1 is None:
         raise ValueError('Problem reading image pair: {}/{} {}/{}'.format(
             input, name0, input, name1))
@@ -218,6 +206,7 @@ def preprocess_overlap_pipeline(
         overlap_inp1,
         overlap_scales1,
         dataset_name,
+        warp_origin=warp_origin,
     )
 
     if index0.shape[0] < 30:

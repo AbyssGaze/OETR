@@ -88,7 +88,7 @@ def benchmark_features(input_pairs,
     for _, data in tqdm(enumerate(loader), total=len(loader)):
         if dynamic_threshold == 'sg':
             results = validation_error(data, sg_thresholds[data['data'][0]])
-        elif dynamic_threshold == 'nn' and 0:
+        elif dynamic_threshold == 'nn':
             results = validation_error(data, nn_thresholds[data['data'][0]])
         else:
             results = validation_error(data)

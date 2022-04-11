@@ -253,6 +253,7 @@ def main(
     viz=False,
     save=False,
     evaluate=False,
+    warp_origin=True,
 ):
     """main pipeline of matching process."""
     if resize is None:
@@ -308,6 +309,7 @@ def main(
                 pair,
                 matching,
                 with_desc,
+                warp_origin=warp_origin,
             )
         else:
             results = preprocess_match_pipeline(
@@ -323,6 +325,7 @@ def main(
                 pair,
                 matching,
                 with_desc,
+                warp_origin=warp_origin,
             )
             if 'icp' in config['matcher']['model']['name']:
                 viz_path = name0 + '_' + name1
@@ -342,7 +345,7 @@ def main(
             if '{}-{}'.format(im0, im1) not in seq_keypoints[scene]:
                 seq_keypoints[scene]['{}-{}'.format(im0,
                                                     im1)] = results['kpts0']
-                if config['overlaper'] is not None:
+                if config['overlaper'] is not None and not warp_origin:
                     seq_inparams[scene]['{}-{}'.format(
                         im0, im1)] = np.concatenate(
                             (
@@ -358,7 +361,7 @@ def main(
             if '{}-{}'.format(im1, im0) not in seq_keypoints[scene]:
                 seq_keypoints[scene]['{}-{}'.format(im1,
                                                     im0)] = results['kpts1']
-                if config['overlaper'] is not None:
+                if config['overlaper'] is not None and not warp_origin:
                     seq_inparams[scene]['{}-{}'.format(
                         im1, im0)] = np.concatenate(
                             (
@@ -524,7 +527,11 @@ if __name__ == '__main__':
     parser.add_argument('--evaluate',
                         action='store_true',
                         help='validation results online')
-
+    parser.add_argument(
+        '--warp_origin',
+        action='store_false',
+        help='Warp keypoints to origin image scale.',
+    )
     opt = parser.parse_args()
     extractor_conf = extract_features.confs[opt.extractor]
     matcher_conf = match_features.confs[opt.matcher]
@@ -557,4 +564,5 @@ if __name__ == '__main__':
         viz=opt.viz,
         save=opt.save,
         evaluate=opt.evaluate,
+        warp_origin=opt.warp_origin,
     )

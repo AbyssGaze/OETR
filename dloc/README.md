@@ -32,10 +32,16 @@ git submodule update --init
 
 
 ## Inference and evaluation
-Download the image pairs and relative pose groundtruth of [IMC]() and [megadepth]() to assets/
+Download the image pairs and relative pose groundtruth of [IMC]() and [megadepth]() to assets/. You could also chose dataset and methods, please reference to `evaluate_imc.sh` and `evaluate_megadepth.sh`, after the results process, you could run evaluation pipeline for imc or megadepth:
+```
+python3 dloc/evaluate/eval_imc.py --input_pairs ./dataset/ImageMatching/imc_0.1.txt --results_path outputs/imc_all/ --methods_file assets/methods.txt
+or
+python3 dloc/evaluate/eval_imc.py --input_pairs ./dataset/megadepth/imc_0.1.txt --results_path outputs/imc_all/ --methods_file assets/methods.txt
+```
 
 1. Benchmark on IMC dataset
 ```sh evaluate_imc.sh```
+
 
 2. Benchmark on Megadepth dataset
 ```sh evaluate_megadepth.sh```
