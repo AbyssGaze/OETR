@@ -13,6 +13,18 @@ We introduce OETR, a neural network for overlap area estimation of image pairs, 
 Local image feature matching under large appearance, viewpoint, and distance changes is challenging yet important. Conventional methods detect and match tentative local features across the whole images, with heuristic consistency checks to guarantee reliable matches. In this paper, we introduce a novel Overlap Estimation method conditioned on image pairs with TRansformer, named OETR, to constrain local feature matching in the commonly visible region. OETR performs overlap estimation in a two-step process of feature correlation and then overlap regression. As a preprocessing module, OETR can be plugged into any existing local feature detection and matching pipeline, to mitigate potential view angle or scale variance. Intensive experiments show that OETR can boost state-of-the-art local feature matching performance substantially, especially for image pairs with small shared regions.
 
 
+## Repository Overview
+The repository is structured as follows:
+- assets/: Some sample files.
+- configs/: Training related configuration files.
+- dataset/: The directory of the datastore.
+- dloc/: Inference pipeline implementation.
+- doc/: Related documentation.
+- scripts/: Execute scripts related to training and inference.
+- src/: OETR implementation source code.
+- third_party/: Some algorithms related to the inference part.
+
+
 ## Datasets
 Generally, two parts of data are needed for OETR, the original training Megadepth datasets, and the validation for relative pose estimation datasets.
 
@@ -41,7 +53,7 @@ scripts/train.sh
 
 
 ## Inference pipeline
-Different to training program, the reference pipeline is in another program.
+Please refer to [README.md](dloc/README.md).
 
 ## BibTex Citation
 
