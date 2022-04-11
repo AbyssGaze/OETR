@@ -24,7 +24,7 @@ class MegaDepthDataset(BaseDataset):
 
         seq_name = info[0].split('/')[1]
         data_name = info[0].split('/')[0]
-        kpts0, kpts1, matches, inparams0, inparams1 = self.process_data(
+        kpts0, kpts1, matches, inparams0, inparams1, scale_diff = self.process_data(
             info, seq_name)
         pair = '{}-{}'.format(info[0].split('/')[-1][:-4],
                               info[1].split('/')[-1][:-4])
@@ -41,6 +41,7 @@ class MegaDepthDataset(BaseDataset):
             'name1': info[1],
             'bbox0': bbox0,
             'bbox1': bbox1,
+            'scale_diff': scale_diff,
         }
         if inparams0 is not None and inparams1 is not None:
             data['inparams0'] = inparams0

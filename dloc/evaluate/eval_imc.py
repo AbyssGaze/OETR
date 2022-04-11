@@ -132,12 +132,13 @@ def main(input_pairs, results_path, methods_file, dataset_path='', viz=False):
 
         method = methods[i][1]
         folder = methods[i][0]
-        if 'superglue' in method.lower():
-            dynamic_threshold = 'sg'
-        elif 'nn' in method.lower():
-            dynamic_threshold = 'nn'
-        else:
-            dynamic_threshold = ''
+        dynamic_threshold = ''
+        if 'oetr' in method.lower():
+            if 'superglue' in method.lower():
+                dynamic_threshold = 'sg'
+            elif 'nn' in method.lower():
+                dynamic_threshold = 'nn'
+
         if os.path.exists(os.path.join(results_path, folder)):
             if 'loftr' in method.lower() or 'oetr' in method.lower():
                 errors[method] = benchmark_features(

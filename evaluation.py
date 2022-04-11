@@ -271,6 +271,7 @@ def main(
     seq_matches = defaultdict(dict)
     seq_pose = defaultdict(dict)
     seq_inparams = defaultdict(dict)
+    seq_scale = defaultdict(dict)
     for i, pair in tqdm(enumerate(pairs), total=len(pairs)):
         name0, name1 = pair[:2]
 
@@ -388,6 +389,14 @@ def main(
             name0.split('/')[-1][:-4],
             name1.split('/')[-1][:-4])] = np.concatenate([[results['index0']],
                                                           [results['index1']]])
+        # get scale different between image pairs
+        if 'ratio0' in results and 'ratio1' in results:
+            seq_scale[scene]['{}-{}'.format(
+                name0.split('/')[-1][:-4],
+                name1.split('/')[-1][:-4])] = min(
+                    results['ratio0'][0] / results['ratio1'][0],
+                    results['ratio1'][0] / results['ratio0'][0],
+                )
 
         if viz:  # and i % 10 == 0:
             if not os.path.exists(os.path.join(output, 'viz')):
@@ -414,7 +423,11 @@ def main(
                         os.path.join(output, k, 'descriptors.h5'))
             save_h5(seq_keypoints[k], os.path.join(output, k, 'keypoints.h5'))
             save_h5(seq_matches[k], os.path.join(output, k, 'matches.h5'))
-            save_h5(seq_inparams[k], os.path.join(output, k, 'inparams.h5'))
+            if len(seq_inparams) > 0:
+                save_h5(seq_inparams[k], os.path.join(output, k,
+                                                      'inparams.h5'))
+            if len(seq_scale) > 0:
+                save_h5(seq_scale[k], os.path.join(output, k, 'scales.h5'))
 
 
 if __name__ == '__main__':

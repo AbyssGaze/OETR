@@ -55,6 +55,12 @@ class BaseDataset(torch.utils.data.Dataset):
                     self.inparams = h5py.File(inparams_path, 'r')
                 else:
                     self.inparams = None
+                scale_path = os.path.join(self.results_path, seq_name,
+                                          'scales.h5')
+                if os.path.exists(scale_path):
+                    self.scale_diff = h5py.File(scale_path, 'r')
+                else:
+                    self.scale_diff = None
             self.seq_name = seq_name
 
         if self.pairwise:
@@ -73,15 +79,23 @@ class BaseDataset(torch.utils.data.Dataset):
                     info[0].split('/')[-1][:-4])].__array__()
             else:
                 inparams0 = inparams1 = None
+            if self.scale_diff is not None and len(self.scale_diff.keys()) > 0:
+                scale_diff = self.scale_diff['{}-{}'.format(
+                    info[0].split('/')[-1][:-4],
+                    info[1].split('/')[-1][:-4])].__array__()
+                scale_diff = float(scale_diff)
+            else:
+                scale_diff = 1.0
         else:
             kpts0 = self.keypoints[info[0].split('/')[-1][:-4]].__array__()
             kpts1 = self.keypoints[info[1].split('/')[-1][:-4]].__array__()
             inparams0 = inparams1 = None
+            scale_diff = 1.0
 
         matches = self.matches['{}-{}'.format(
             info[0].split('/')[-1][:-4],
             info[1].split('/')[-1][:-4])].__array__()
-        return kpts0, kpts1, matches, inparams0, inparams1
+        return kpts0, kpts1, matches, inparams0, inparams1, scale_diff
 
     def __getitem__(self, idx):
         pass

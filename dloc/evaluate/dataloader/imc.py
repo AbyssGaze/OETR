@@ -42,7 +42,7 @@ class IMCDataset(BaseDataset):
         pose = np.array(info[20:36], dtype=float).reshape(4, 4)
         seq_name = info[0].split('/')[1]
         data_name = info[0].split('/')[0]
-        kpts0, kpts1, matches, inparams0, inparams1 = self.process_data(
+        kpts0, kpts1, matches, inparams0, inparams1, scale_diff = self.process_data(
             info, data_name + '/' + seq_name)
 
         data = {
@@ -56,6 +56,7 @@ class IMCDataset(BaseDataset):
             'data': data_name,
             'name0': info[0],
             'name1': info[1],
+            'scale_diff': scale_diff,
         }
         if inparams0 is not None and inparams1 is not None:
             data['inparams0'] = inparams0

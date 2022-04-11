@@ -127,6 +127,7 @@ def process(
     else:
         kpts0 = pred['keypoints0']  # * scales0
         kpts1 = pred['keypoints1']  # * scales1
+
     matches, conf = pred['matches0'], pred['matching_scores0']
     desc0, desc1 = pred['descriptors0'], pred['descriptors1']
 

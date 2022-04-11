@@ -5,18 +5,11 @@
 @Author  :   AbyssGaze
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
-
-import sys
-from pathlib import Path
-
 import torch
 
-sys.path.append(str(Path(__file__).parent / '../../../third_party/'))
-
-from OETR.src.config.default import get_cfg_defaults  # noqa: E402
-from OETR.src.model import build_detectors  # noqa: E402
-
-from ..utils.base_model import BaseModel  # noqa: E402
+from dloc.core.utils.base_model import BaseModel  # noqa: E402
+from src.config.default import get_cfg_defaults
+from src.model import build_detectors
 
 
 class OETR(BaseModel):
