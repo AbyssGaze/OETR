@@ -401,11 +401,13 @@ def main(
                     results['ratio1'][0] / results['ratio0'][0],
                 )
 
-        if viz:  # and i % 10 == 0:
+        if viz and i % 10 == 0:
             if not os.path.exists(os.path.join(output, 'viz')):
                 os.makedirs(os.path.join(output, 'viz'))
+
             viz_pairs(
-                os.path.join(output, 'viz/{}_'.format(scene)),
+                os.path.join(output, 'viz/{}_'.format(scene.replace('/',
+                                                                    '-'))),
                 results['image0'],
                 results['image1'],
                 name0,

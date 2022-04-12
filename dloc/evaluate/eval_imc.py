@@ -61,7 +61,8 @@ def log_summary(error, method, logger):
 def benchmark_features(input_pairs,
                        results_path,
                        pairwise=False,
-                       dynamic_threshold=''):
+                       dynamic_threshold='',
+                       specific_dataset=''):
     """IMC evaluation implementation.
 
     Args:
@@ -70,7 +71,10 @@ def benchmark_features(input_pairs,
         pairwise (bool, optional): results with pairwise keys. Defaults to False.
         dynamic_threshold (bool, optional): using dynamic threshold for different dataset. Defaults to False.
     """
-    loader = IMCDataset(input_pairs, results_path, pairwise=pairwise)
+    loader = IMCDataset(input_pairs,
+                        results_path,
+                        pairwise=pairwise,
+                        specific_dataset=specific_dataset)
     loader = torch.utils.data.DataLoader(loader, num_workers=0)
     pose_errors = defaultdict(list)
     precisions = defaultdict(list)
@@ -120,7 +124,14 @@ def benchmark_features(input_pairs,
     return [all_data, all_aucs, all_prec, all_ms, all_mAA]
 
 
-def main(input_pairs, results_path, methods_file, dataset_path='', viz=False):
+def main(
+    input_pairs,
+    results_path,
+    methods_file,
+    dataset_path='',
+    specific_dataset='',
+    viz=False,
+):
     with open(methods_file, 'r') as f:
         methods = [line.split() for line in f.readlines()]
     errors = {}
@@ -146,12 +157,14 @@ def main(input_pairs, results_path, methods_file, dataset_path='', viz=False):
                     os.path.join(results_path, folder),
                     pairwise=True,
                     dynamic_threshold=dynamic_threshold,
+                    specific_dataset=specific_dataset,
                 )
             else:
                 errors[method] = benchmark_features(
                     input_pairs,
                     os.path.join(results_path, folder),
                     dynamic_threshold=dynamic_threshold,
+                    specific_dataset=specific_dataset,
                 )
             log_summary(errors[method], method, logger)
     summary(errors)
@@ -162,7 +175,12 @@ if __name__ == '__main__':
         description='Image pair matching and pose evaluation with IMC datase',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
+    parser.add_argument(
+        '--specific_dataset',
+        type=str,
+        default='',
+        help='Path to the list of image pairs',
+    )
     parser = arg_parse(parser)
     args = parser.parse_args()
     main(**args.__dict__)

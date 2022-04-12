@@ -948,7 +948,6 @@ def make_matching_plot_fast(
             1,
             cv2.LINE_AA,
         )
-
     if path is not None:
         cv2.imwrite(str(path), out)
 

@@ -20,13 +20,18 @@ class IMCDataset(BaseDataset):
         keypoints=None,
         matches=None,
         pairwise=False,
+        specific_dataset='',
     ):
+        if not specific_dataset:
+            dataset_list = [
+                'googleurban-val', 'pragueparks-val', 'phototourism-val'
+            ]
+        else:
+            dataset_list = [specific_dataset]
         with open(input_pairs, 'r') as f:
             self.pairs_list = [
-                line.strip('\n').split(' ')
-                for line in f.readlines() if line.split('/')[0] in [
-                    'googleurban-val'
-                ]  # ["googleurban-val", "pragueparks-val", "phototourism-val"]
+                line.strip('\n').split(' ') for line in f.readlines()
+                if line.split('/')[0] in dataset_list
             ]
 
         self.results_path = results_path
