@@ -130,7 +130,10 @@ def process(
         kpts1 = pred['keypoints1']  # * scales1
 
     matches, conf = pred['matches0'], pred['matching_scores0']
-    desc0, desc1 = pred['descriptors0'], pred['descriptors1']
+    if with_desc:
+        desc0, desc1 = pred['descriptors0'], pred['descriptors1']
+    else:
+        desc0, desc1 = None, None
 
     valid = matches > -1
     index0 = np.nonzero(valid)[0]

@@ -51,6 +51,8 @@ class Matching(torch.nn.Module):
                                     config['matcher']['model']['name'])(
                                         config['matcher']['model'], model_path)
         self.extractor_name = self.config['extractor']['model']['name']
+        self.matcher_name = self.config['matcher']['model']['name']
+        self.size_divisor = 1
 
     def forward(self, data, with_overlap=False):
         """Run extractors and matchers
@@ -58,7 +60,7 @@ class Matching(torch.nn.Module):
         Args:
           data: dictionary with minimal keys: ['image0', 'image1']
         """
-        if self.config['direct']:
+        if self.config['direct'] and not with_overlap:
             return self.matcher(data)
 
         if with_overlap:
@@ -99,9 +101,17 @@ class Matching(torch.nn.Module):
                 (data['dataset_name'] == 'pragueparks-val'
                  and overlap_scores > 2.0)
                     or data['dataset_name'] != 'pragueparks-val'):
+                if self.matcher_name == 'loftr':
+                    self.size_divisor = 8
                 overlap0, overlap1, ratio0, ratio1 = tensor_overlap_crop(
-                    data['image0'], bbox0, data['image1'], bbox1,
-                    self.extractor_name)
+                    data['image0'],
+                    bbox0,
+                    data['image1'],
+                    bbox1,
+                    self.extractor_name,
+                    self.size_divisor,
+                )
+
                 pred.update({
                     'bbox0':
                     bbox0,
@@ -112,6 +122,13 @@ class Matching(torch.nn.Module):
                     'ratio1':
                     torch.tensor(ratio1, device=bbox0.device),
                 })
+                if self.config['direct']:
+                    matches = self.matcher({
+                        'image0': overlap0,
+                        'image1': overlap1
+                    })
+                    pred.update(matches)
+                    return pred
                 # Extract SuperPoint (keypoints, scores, descriptors) if not provided
                 if 'keypoints0' not in data:
                     # self.extractor.net.config['nms_radius'] = 3 * math.ceil(ratio0)
@@ -121,6 +138,7 @@ class Matching(torch.nn.Module):
                     # self.extractor.net.config['nms_radius'] = 3 * math.ceil(ratio1)
                     pred1 = self.extractor({'image': overlap1})
                     pred.update(dict((k + '1', v) for k, v in pred1.items()))
+
             else:
                 pred.update({
                     'bbox0':
@@ -148,6 +166,10 @@ class Matching(torch.nn.Module):
                     'ratio1':
                     torch.tensor([[1.0, 1.0]], device=bbox0.device),
                 })
+                if self.config['direct']:
+                    matches = self.matcher(data)
+                    pred.update(matches)
+                    return pred
                 if 'keypoints0' not in data:
                     pred0 = self.extractor({'image': data['image0']})
                     pred.update(dict((k + '0', v) for k, v in pred0.items()))
@@ -156,29 +178,34 @@ class Matching(torch.nn.Module):
                     pred.update(dict((k + '1', v) for k, v in pred1.items()))
 
         else:
-            pred = extract_process(self.extractor, data)
-            pred.update({
-                'bbox0':
-                torch.tensor(
-                    [[
-                        0.0, 0.0, data['image0'].shape[3],
-                        data['image0'].shape[2]
-                    ]],
-                    device=data['image0'].device,
-                ),
-                'bbox1':
-                torch.tensor(
-                    [[
-                        0.0, 0.0, data['image1'].shape[3],
-                        data['image1'].shape[2]
-                    ]],
-                    device=data['image0'].device,
-                ),
-                'ratio0':
-                torch.tensor([[1.0, 1.0]], device=data['image0'].device),
-                'ratio1':
-                torch.tensor([[1.0, 1.0]], device=data['image0'].device),
-            })
+            if not self.config['direct']:
+                pred = extract_process(self.extractor, data)
+                pred.update({
+                    'bbox0':
+                    torch.tensor(
+                        [[
+                            0.0,
+                            0.0,
+                            data['image0'].shape[3],
+                            data['image0'].shape[2],
+                        ]],
+                        device=data['image0'].device,
+                    ),
+                    'bbox1':
+                    torch.tensor(
+                        [[
+                            0.0,
+                            0.0,
+                            data['image1'].shape[3],
+                            data['image1'].shape[2],
+                        ]],
+                        device=data['image0'].device,
+                    ),
+                    'ratio0':
+                    torch.tensor([[1.0, 1.0]], device=data['image0'].device),
+                    'ratio1':
+                    torch.tensor([[1.0, 1.0]], device=data['image0'].device),
+                })
 
         # Batch all features
         # We should either have i) one image per batch, or

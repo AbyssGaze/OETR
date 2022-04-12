@@ -506,7 +506,12 @@ def overlap_filter(mkpts1, bbox1, mkpts2, bbox2):
     return valid
 
 
-def tensor_overlap_crop(image1, bbox1, image2, bbox2, extractor_name):
+def tensor_overlap_crop(image1,
+                        bbox1,
+                        image2,
+                        bbox2,
+                        extractor_name,
+                        size_divisor=1):
     bbox1 = bbox1[0].int()
     bbox2 = bbox2[0].int()
     origin_w1, origin_h1 = image1.shape[2:][::-1]
@@ -535,6 +540,17 @@ def tensor_overlap_crop(image1, bbox1, image2, bbox2, extractor_name):
                           interpolation=cv2.INTER_CUBIC)
     cv_left = cv2.resize(cv_left.astype('float32'), (new_w1, new_h1),
                          interpolation=cv2.INTER_CUBIC)
+
+    if size_divisor > 1:
+        new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
+        new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
+        cv_right = cv2.resize(cv_right.astype('float32'), (new_w2, new_h2),
+                              interpolation=cv2.INTER_CUBIC)
+        new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
+        new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
+        cv_left = cv2.resize(cv_left.astype('float32'), (new_w1, new_h1),
+                             interpolation=cv2.INTER_CUBIC)
+
     if len(cv_right.shape) == 3:
         right = (torch.from_numpy(cv_right / 255).float().to(
             image1.device).permute((2, 0, 1)))

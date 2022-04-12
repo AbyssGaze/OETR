@@ -80,7 +80,7 @@ def benchmark_features(input_pairs,
     precisions = defaultdict(list)
     matching_scores = defaultdict(list)
     sg_thresholds = {
-        'googleurban-val': 0.85,  # 0.5,
+        'googleurban-val': 0.5,  # 0.5,
         'pragueparks-val': 0.8,
         'phototourism-val': 0.45,
     }
