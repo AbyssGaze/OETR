@@ -279,7 +279,7 @@ def read_overlap_image(
     overlap=False,
 ):
     image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if not align:  # or not overlap:
+    if not align or align == 'm2o':  # or not overlap:
         image = image[:, :, ::-1]  # BGR to RGB
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     if image is None:
@@ -292,6 +292,9 @@ def read_overlap_image(
     elif align == 'loftr':
         w_new = math.ceil(w / 8) * 8
         h_new = math.ceil(h / 8) * 8
+    elif align == 'm2o':
+        w_new = math.ceil(w / 64) * 64
+        h_new = math.ceil(h / 64) * 64
     else:
         w_new, h_new = process_resize(w, h, [-1])
 
@@ -416,7 +419,7 @@ def read_image(
         image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     else:
         image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        if not align:
+        if not align or align == 'm2o':
             image = image[:, :, ::-1]  # BGR to RGB
     if image is None:
         return None, None, None
@@ -430,6 +433,9 @@ def read_image(
     elif align == 'loftr':
         w_new = math.ceil(w_new / 8) * 8
         h_new = math.ceil(h_new / 8) * 8
+    elif align == 'm2o':
+        w_new = math.ceil(w_new / 64) * 64
+        h_new = math.ceil(h_new / 64) * 64
 
     scales = (float(w) / float(w_new), float(h) / float(h_new))
 
@@ -442,15 +448,15 @@ def read_image(
         image = np.rot90(image, k=rotation)
         if rotation % 2:
             scales = scales[::-1]
-    if overlap:
-        inp = image[None]  # HxWxC to CxHxW
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # if overlap:
+    #     inp = image[None]  # HxWxC to CxHxW
+    #     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # else:
+    if grayscale:
+        inp = image[None, None]
     else:
-        if grayscale:
-            inp = image[None, None]
-        else:
-            inp = image.transpose((2, 0, 1))[None]  # HxWxC to CxHxW
-            # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        inp = image.transpose((2, 0, 1))[None]  # HxWxC to CxHxW
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     inp = torch.from_numpy(inp / 255.0).float().to(device)
 
     return image, inp, scales
@@ -532,7 +538,13 @@ def tensor_overlap_crop(image1,
                                               extractor_name)
         ratio2, new_w2, new_h2 = patch_resize(origin_w2, origin_h2, w2, h2,
                                               extractor_name)
-
+    if size_divisor > 1:
+        new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
+        new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
+        new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
+        new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
+        ratio1 = [[float(new_w1) / float(w1), float(new_h1) / float(h1)]]
+        ratio2 = [[float(new_w2) / float(w2), float(new_h2) / float(h2)]]
     cv_right = right.permute((1, 2, 0)).cpu().numpy() * 255
     cv_left = left.permute((1, 2, 0)).cpu().numpy() * 255
 
@@ -541,25 +553,26 @@ def tensor_overlap_crop(image1,
     cv_left = cv2.resize(cv_left.astype('float32'), (new_w1, new_h1),
                          interpolation=cv2.INTER_CUBIC)
 
-    if size_divisor > 1:
-        new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
-        new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
-        cv_right = cv2.resize(cv_right.astype('float32'), (new_w2, new_h2),
-                              interpolation=cv2.INTER_CUBIC)
-        new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
-        new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
-        cv_left = cv2.resize(cv_left.astype('float32'), (new_w1, new_h1),
-                             interpolation=cv2.INTER_CUBIC)
-
+    # if size_divisor > 1:
+    #     new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
+    #     new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
+    #     cv_right = cv2.resize(
+    #         cv_right.astype("float32"), (new_w2, new_h2), interpolation=cv2.INTER_CUBIC
+    #     )
+    #     new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
+    #     new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
+    #     cv_left = cv2.resize(
+    #         cv_left.astype("float32"), (new_w1, new_h1), interpolation=cv2.INTER_CUBIC
+    #     )
     if len(cv_right.shape) == 3:
-        right = (torch.from_numpy(cv_right / 255).float().to(
+        right = (torch.from_numpy(cv_right / 255.).float().to(
             image1.device).permute((2, 0, 1)))
-        left = (torch.from_numpy(cv_left / 255).float().to(
+        left = (torch.from_numpy(cv_left / 255.).float().to(
             image1.device).permute((2, 0, 1)))
     else:
-        right = torch.from_numpy(cv_right / 255).float().to(
+        right = torch.from_numpy(cv_right / 255.).float().to(
             image1.device)[None]
-        left = torch.from_numpy(cv_left / 255).float().to(image1.device)[None]
+        left = torch.from_numpy(cv_left / 255.).float().to(image1.device)[None]
 
     return left[None], right[None], ratio1, ratio2
 

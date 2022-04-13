@@ -103,6 +103,9 @@ class Matching(torch.nn.Module):
                     or data['dataset_name'] != 'pragueparks-val'):
                 if self.matcher_name == 'loftr':
                     self.size_divisor = 8
+                elif self.matcher_name == 'm2omatcher':
+                    self.size_divisor = 32
+
                 overlap0, overlap1, ratio0, ratio1 = tensor_overlap_crop(
                     data['image0'],
                     bbox0,
@@ -281,6 +284,7 @@ def main(
     save=False,
     evaluate=False,
     warp_origin=True,
+    debug=False,
 ):
     """main pipeline of matching process."""
     if resize is None:
@@ -302,9 +306,8 @@ def main(
     seq_scale = defaultdict(dict)
     for i, pair in tqdm(enumerate(pairs), total=len(pairs)):
         name0, name1 = pair[:2]
-
-        # if "googleurban-val" not in name0:
-        #     continue
+        if debug and 'googleurban-val' not in name0:
+            continue
         gray = config['extractor']['preprocessing']['grayscale']
         # Load the image pair.
         align = ''
@@ -313,6 +316,10 @@ def main(
         elif 'loftr' in config['matcher']['output']:
             align = 'loftr'
             with_desc = False
+        elif 'm2o' in config['matcher']['output']:
+            align = 'm2o'
+            with_desc = False
+
         if 'megadepth' in input_pairs:
             scene = name0.split('/')[1]
         elif 'imc' in input_pairs:
@@ -352,7 +359,7 @@ def main(
                 pair,
                 matching,
                 with_desc,
-                warp_origin=warp_origin,
+                # warp_origin=warp_origin,
             )
             if 'icp' in config['matcher']['model']['name']:
                 viz_path = name0 + '_' + name1
@@ -365,8 +372,9 @@ def main(
                 continue
 
         # Write matching results
-        if 'loftr' in config['matcher']['output'] or config[
-                'overlaper'] is not None:
+        if ('loftr' in config['matcher']['output']
+                or 'm2o' in config['matcher']['output']
+                or config['overlaper'] is not None):
             # For all matcher-dependent keypoints
             im0, im1 = name0.split('/')[-1][:-4], name1.split('/')[-1][:-4]
             if '{}-{}'.format(im0, im1) not in seq_keypoints[scene]:
@@ -499,6 +507,7 @@ if __name__ == '__main__':
             'disk',
             'cotr',
             'loftr',
+            'm2o',
         },
         default='indoor',
         help='SuperGlue weights',
@@ -560,6 +569,11 @@ if __name__ == '__main__':
         '--warp_origin',
         action='store_false',
         help='Warp keypoints to origin image scale.',
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Debug with subset dataset.',
     )
     opt = parser.parse_args()
     extractor_conf = extract_features.confs[opt.extractor]

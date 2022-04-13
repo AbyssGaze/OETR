@@ -14,7 +14,7 @@ from multiprocessing import Pool
 import h5py
 import numpy as np
 
-from src.datasets.utils import numpy_overlap_box
+from oetr.datasets.utils import numpy_overlap_box
 
 
 def boxes(points):

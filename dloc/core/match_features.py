@@ -86,6 +86,12 @@ confs = {
             'name': 'loftr',
         },
     },
+    'm2o': {
+        'output': 'matches-m2o',
+        'model': {
+            'name': 'm2omatcher',
+        },
+    },
     'icp': {
         'output': 'matches-icp',
         'model': {

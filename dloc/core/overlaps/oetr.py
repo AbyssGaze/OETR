@@ -8,8 +8,8 @@
 import torch
 
 from dloc.core.utils.base_model import BaseModel  # noqa: E402
-from src.config.default import get_cfg_defaults
-from src.model import build_detectors
+from oetr.config.default import get_cfg_defaults
+from oetr.model import build_detectors
 
 
 class OETR(BaseModel):
@@ -34,7 +34,6 @@ class OETR(BaseModel):
         return cfg
 
     def _init(self, conf, model_path):
-        # pdb.set_trace()
         self.conf = {**self.default_conf, **conf}
         self.cfg = self.build_cfg(self.conf)
         self.net = build_detectors(self.cfg.OETR)

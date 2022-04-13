@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from src.datasets.utils import numpy_overlap_box, recover_pair, visualize_mask
+from oetr.datasets.utils import numpy_overlap_box, recover_pair, visualize_mask
 
 
 class MegaDepthPairsDataset(Dataset):

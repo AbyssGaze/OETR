@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 """
-@File    :   loftr.py
-@Time    :   2021/06/28 14:53:53
+@File    :   m2omatcher.py
+@Time    :   2022/04/13 10:42:13
 @Author  :   AbyssGaze
-@Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
+
+from __future__ import absolute_import
+
 import os
 import sys
 from pathlib import Path
@@ -13,24 +15,18 @@ from pathlib import Path
 import numpy as np
 import torch
 
-sys.path.append(str(Path(__file__).parent / '../../../third_party/LoFTR/'))
+# sys.path.append(str(Path(__file__).parent / "../../../third_party/M2OMatcher"))
+sys.path.append(str(Path(__file__).parent / '../../../third_party/M2OMatcher'))
 
-from src.loftr.loftr import LoFTR  # noqa: E402
-from src.loftr.utils.cvpr_ds_config import default_cfg  # noqa: E402
+from src.loftr import default_cfg  # noqa: E402
+from src.loftr.loftr_match2 import LoFTR  # noqa: E402
 
 from ..utils.base_model import BaseModel  # noqa: E402
 
 
-class loftr(BaseModel):
-    """LoFTR Convolutional Detector and Matcher.
-
-    LoFTR: Detector-Free Local Feature Matching with Transformers.
-    Sun, Jiaming and Shen, Zehong and Wang, Yuang and Bao, Hujun and Zhou, Xiaowei.
-    In CVPR, 2021. https://arxiv.org/abs/2104.00680
-    """
-
+class M2OMatcher(BaseModel):
     default_conf = {
-        'weights': 'loftr/outdoor_ds.ckpt',
+        'weights': 'm2o/m2omatcher.ckpt',
     }
     required_inputs = [
         'image0',
@@ -39,10 +35,14 @@ class loftr(BaseModel):
 
     def _init(self, conf, model_path):
         self.conf = {**self.default_conf, **conf}
-        self.model = LoFTR(config=default_cfg)
+
+        self.model = LoFTR(config=dict(default_cfg), training=False)
+
+        weights = torch.load(os.path.join(model_path, self.conf['weights']),
+                             map_location='cpu')['state_dict']
         self.model.load_state_dict(
-            torch.load(os.path.join(model_path,
-                                    self.conf['weights']))['state_dict'])
+            {k.replace('matcher.', ''): v
+             for k, v in weights.items()})
         self.model = self.model.eval().cuda()
 
     def _forward(self, data):
@@ -50,7 +50,7 @@ class loftr(BaseModel):
         self.model(batch)
         mkpts0 = batch['mkpts0_f']
         mkpts1 = batch['mkpts1_f']
-        mconf = batch['mconf']
+        mconf = batch['scores']
         matches = torch.from_numpy(np.arange(mkpts0.shape[0])).to(
             mkpts0.device)
         return {

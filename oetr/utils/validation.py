@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-'''
+"""
 @File    :   validation.py
 @Time    :   2021/06/30 17:08:35
 @Author  :   AbyssGaze
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
-'''
+"""
 import os
 
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from src.losses.utils import bbox_oiou, bbox_overlaps
+from oetr.losses.utils import bbox_oiou, bbox_overlaps
 
 from .utils import visualize_centerness_overlap_gt, visualize_overlap_gt
 
@@ -51,14 +51,16 @@ def eval_recalls(ious, iou_thrs=0.5, logger=None):
 
 
 @torch.no_grad()
-def evaluate(model,
-             dataloader,
-             logger,
-             save_path,
-             iou_thrs=np.arange(0.5, 0.96, 0.05),
-             epoch=0,
-             oiou=False,
-             viz=False):
+def evaluate(
+        model,
+        dataloader,
+        logger,
+        save_path,
+        iou_thrs=np.arange(0.5, 0.96, 0.05),
+        epoch=0,
+        oiou=False,
+        viz=False,
+):
     ious = []
     oious = []
     for i, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
@@ -93,15 +95,26 @@ def evaluate(model,
                 'epoch' + str(epoch) + '_' + batch['file_name'][0])
             if 'pred_center1' in data.keys():
                 visualize_centerness_overlap_gt(
-                    batch['image1'][0].cpu().numpy() * 255, bbox1, gt_bbox1,
+                    batch['image1'][0].cpu().numpy() * 255,
+                    bbox1,
+                    gt_bbox1,
                     data['pred_center1'][0].cpu().numpy(),
-                    batch['image2'][0].cpu().numpy() * 255, bbox2, gt_bbox2,
-                    data['pred_center2'][0].cpu().numpy(), viz_name)
+                    batch['image2'][0].cpu().numpy() * 255,
+                    bbox2,
+                    gt_bbox2,
+                    data['pred_center2'][0].cpu().numpy(),
+                    viz_name,
+                )
             else:
-                visualize_overlap_gt(batch['image1'][0].cpu().numpy() * 255,
-                                     bbox1, gt_bbox1,
-                                     batch['image2'][0].cpu().numpy() * 255,
-                                     bbox2, gt_bbox2, viz_name)
+                visualize_overlap_gt(
+                    batch['image1'][0].cpu().numpy() * 255,
+                    bbox1,
+                    gt_bbox1,
+                    batch['image2'][0].cpu().numpy() * 255,
+                    bbox2,
+                    gt_bbox2,
+                    viz_name,
+                )
 
     eval_recalls(ious, iou_thrs, logger)
     if oiou:
@@ -109,14 +122,16 @@ def evaluate(model,
 
 
 @torch.no_grad()
-def evaluate_dummy(model,
-                   dataloader,
-                   logger,
-                   save_path,
-                   iou_thrs=np.arange(0.5, 0.96, 0.05),
-                   epoch=0,
-                   oiou=False,
-                   viz=False):
+def evaluate_dummy(
+        model,
+        dataloader,
+        logger,
+        save_path,
+        iou_thrs=np.arange(0.5, 0.96, 0.05),
+        epoch=0,
+        oiou=False,
+        viz=False,
+):
     ious = []
     for _, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
         image1, image2 = batch['image1'].cuda(), batch['image2'].cuda()
@@ -140,7 +155,13 @@ def evaluate_dummy(model,
             viz_name = os.path.join(
                 str(save_path),
                 'epoch' + str(epoch) + '_' + batch['file_name'][0])
-            visualize_overlap_gt(batch['image1'][0].numpy() * 255, bbox1,
-                                 gt_bbox1, batch['image2'][0].numpy() * 255,
-                                 bbox2, gt_bbox2, viz_name)
+            visualize_overlap_gt(
+                batch['image1'][0].numpy() * 255,
+                bbox1,
+                gt_bbox1,
+                batch['image2'][0].numpy() * 255,
+                bbox2,
+                gt_bbox2,
+                viz_name,
+            )
     eval_recalls(ious, iou_thrs, logger)

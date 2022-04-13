@@ -17,7 +17,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from src.datasets.utils import numpy_overlap_box
+from oetr.datasets.utils import numpy_overlap_box
 
 
 def visualize_box(image1, bbox1, points1, depth1, image2, bbox2, points2,
