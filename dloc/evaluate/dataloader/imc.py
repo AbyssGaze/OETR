@@ -6,6 +6,7 @@
 @Version :   1.0
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
+import os
 
 import numpy as np
 
@@ -23,9 +24,10 @@ class IMCDataset(BaseDataset):
         specific_dataset='',
     ):
         if not specific_dataset:
-            dataset_list = [
-                'googleurban-val', 'pragueparks-val', 'phototourism-val'
-            ]
+            # dataset_list = [
+            #     'googleurban-val', 'pragueparks-val', 'phototourism-val'
+            # ]
+            dataset_list = os.listdir(results_path)
         else:
             dataset_list = [specific_dataset]
         with open(input_pairs, 'r') as f:

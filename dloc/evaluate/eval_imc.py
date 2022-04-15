@@ -19,15 +19,17 @@ from utils.evaluation import validation_error
 from utils.utils import get_logger, pose_auc, pose_mAA
 
 
-def summary(state):
+def summary(state, total=False):
     """summary results."""
     print('methods\t\t\t datasets\t AUC@5\t AUC@10\t AUC@20\t',
           'Prec\t MScore\t mAA@10\t')
     for k, v in state.items():
         data, aucs, prec, ms, mAA = v
         for i in range(len(data)):
+            if total and 'total' not in data[i].split('-')[0]:
+                continue
             name = ''.ljust(20) if i > 0 else k.ljust(20)
-            print('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.6f}\t'.
+            print('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t'.
                   format(
                       name,
                       data[i].split('-')[0],
@@ -40,13 +42,15 @@ def summary(state):
                   ))
 
 
-def log_summary(error, method, logger):
+def log_summary(error, method, logger, total=False):
     """summary results with logger."""
     data, aucs, prec, ms, mAA = error
     for i in range(len(data)):
+        if total and 'total' not in data[i].split('-')[0]:
+            continue
         name = ''.ljust(20) if i > 0 else method.ljust(20)
         logger.info(
-            '{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.6f}\t'.format(
+            '{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t'.format(
                 name,
                 data[i].split('-')[0],
                 aucs[i][0],
@@ -131,13 +135,15 @@ def main(
     dataset_path='',
     specific_dataset='',
     viz=False,
+    output='imc.log',
+    total=False,
 ):
     with open(methods_file, 'r') as f:
         methods = [line.split() for line in f.readlines()]
     errors = {}
     for i in range(len(methods)):
         if i == 0:
-            logger = get_logger('imc.log')
+            logger = get_logger(output)
             logger.info('methods\t\t\t datasets\t AUC@5\t AUC@10\t AUC@20\t'
                         'Prec\t MScore\t mAA@10\t')
 
@@ -167,8 +173,8 @@ def main(
                     dynamic_threshold=dynamic_threshold,
                     specific_dataset=specific_dataset,
                 )
-            log_summary(errors[method], method, logger)
-    summary(errors)
+            log_summary(errors[method], method, logger, total=total)
+    summary(errors, total=total)
 
 
 if __name__ == '__main__':
@@ -181,6 +187,17 @@ if __name__ == '__main__':
         type=str,
         default='',
         help='Path to the list of image pairs',
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        default='imc.log',
+        help='output results',
+    )
+    parser.add_argument(
+        '--total',
+        action='store_true',
+        help='Summary with total results.',
     )
     parser = arg_parse(parser)
     args = parser.parse_args()

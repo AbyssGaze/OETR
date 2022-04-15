@@ -22,6 +22,3 @@
 [submodule "third_party/COTR"]
 	path = third_party/COTR
 	url = https://github.com/ubc-vision/COTR.git
-[submodule "third_party/M2OMatcher"]
-	path = third_party/M2OMatcher
-	url = git@git.woa.com:mumuychen/M2OMatcher.git
