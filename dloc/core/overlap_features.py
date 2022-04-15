@@ -138,7 +138,6 @@ def process(
     valid = matches > -1
     index0 = np.nonzero(valid)[0]
     index1 = matches[valid]
-
     return (
         kpts0,
         desc0,
@@ -169,13 +168,30 @@ def preprocess_overlap_pipeline(
     matching,
     with_desc=False,
     warp_origin=True,
+    size_divisor=1,
 ):
     image0, overlap_inp0, inp0, scales0, overlap_scales0 = read_overlap_image(
-        os.path.join(input, name0), device, resize, 0, resize_float, gray,
-        align, True)
+        os.path.join(input, name0),
+        device,
+        resize,
+        0,
+        resize_float,
+        gray,
+        align,
+        True,
+        size_divisor,
+    )
     image1, overlap_inp1, inp1, scales1, overlap_scales1 = read_overlap_image(
-        os.path.join(input, name1), device, resize, 0, resize_float, gray,
-        align, True)
+        os.path.join(input, name1),
+        device,
+        resize,
+        0,
+        resize_float,
+        gray,
+        align,
+        True,
+        size_divisor,
+    )
     if image0 is None or image1 is None:
         raise ValueError('Problem reading image pair: {}/{} {}/{}'.format(
             input, name0, input, name1))

@@ -7,11 +7,16 @@
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
 import argparse
+import csv
 import os
+import random
+from collections import namedtuple
 
 import h5py
 import numpy as np
 from tqdm import tqdm
+
+Gt = namedtuple('Gt', ['K', 'R', 'T'])
 
 
 def calib_to_matrix(calib):
@@ -69,6 +74,76 @@ def generate_pairs(scenes_path, datasets, overlap_ratio=0.1):
                        relative_pose))
 
 
+def generate_covisibility_pairs(filename, ratio=0.1, max_pairs_per_scene=100):
+    pairs = []
+    with open(filename) as f:
+        reader = csv.reader(f, delimiter=',')
+        for i, row in enumerate(reader):
+            if i == 0:
+                continue
+            if float(row[1]) >= ratio:
+                pairs.append(row[0])
+    random.shuffle(pairs)
+    pairs = pairs[:max_pairs_per_scene]
+    return pairs
+
+
+def load_calibration(filename):
+    """Load calibration data (ground truth) from the csv file."""
+
+    calib_dict = {}
+    with open(filename, 'r') as f:
+        reader = csv.reader(f, delimiter=',')
+        for i, row in enumerate(reader):
+            # Skip header.
+            if i == 0:
+                continue
+
+            camera_id = row[0]
+            K = np.array([float(v) for v in row[1].split(' ')]).reshape([3, 3])
+            R = np.array([float(v) for v in row[2].split(' ')]).reshape([3, 3])
+            T = np.array([float(v) for v in row[3].split(' ')])
+            calib_dict[camera_id] = Gt(K=K, R=R, T=T)
+
+    return calib_dict
+
+
+def generate_imc2022_pairs(dataset_dir, ratio=0.1, max_pairs_per_scene=100):
+    pair_file = open('imc_2022_{}.txt'.format(ratio), 'w')
+
+    scenes = []
+    for f in os.listdir(dataset_dir):
+        if os.path.isdir(os.path.join(dataset_dir, f)):
+            scenes.append(f)
+
+    for scene in tqdm(scenes, total=len(scenes)):
+        # images = os.listdir(os.path.join(dataset_dir, scene, 'images'))
+        covisibility_dict = generate_covisibility_pairs(
+            os.path.join(dataset_dir, scene, 'pair_covisibility.csv'),
+            ratio,
+            max_pairs_per_scene,
+        )
+        calib_dict = load_calibration(
+            os.path.join(dataset_dir, scene, 'calibration.csv'))
+        for pair in covisibility_dict:
+            id0, id1 = pair.split('-')
+            K0 = ' '.join(map(str, calib_dict[id0].K.__array__().reshape(-1)))
+            K1 = ' '.join(map(str, calib_dict[id1].K.__array__().reshape(-1)))
+            pose0 = calib_to_matrix({
+                'R': calib_dict[id0].R,
+                'T': calib_dict[id0].T
+            })
+            pose1 = calib_to_matrix({
+                'R': calib_dict[id1].R,
+                'T': calib_dict[id1].T
+            })
+            relative_pose = ' '.join(
+                map(str, (np.matmul(pose1, np.linalg.inv(pose0)).reshape(-1))))
+            pair_file.write(
+                '{}/images/{}.jpg {}/images/{}.jpg {} {} {}\n'.format(
+                    scene, id0, scene, id1, K0, K1, relative_pose))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Generate IMC image pairs',
@@ -92,4 +167,5 @@ if __name__ == '__main__':
                         default=0.1,
                         help='overlap_ratio')
     args = parser.parse_args()
-    generate_pairs(args.scenes, args.datasets, args.overlap_ratio)
+    # generate_pairs(args.scenes, args.datasets, args.overlap_ratio)
+    generate_imc2022_pairs(args.datasets)

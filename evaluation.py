@@ -24,7 +24,7 @@ from dloc.core.match_features import preprocess_match_pipeline
 from dloc.core.overlap_features import preprocess_overlap_pipeline
 from dloc.core.utils.base_model import dynamic_load
 from dloc.core.utils.utils import (make_matching_plot, tensor_overlap_crop,
-                                   vis_aligned_image)
+                                   update_default_info, vis_aligned_image)
 
 torch.set_grad_enabled(False)
 
@@ -51,20 +51,20 @@ class Matching(torch.nn.Module):
                                     config['matcher']['model']['name'])(
                                         config['matcher']['model'], model_path)
         self.extractor_name = self.config['extractor']['model']['name']
-        self.matcher_name = self.config['matcher']['model']['name']
-        self.size_divisor = 1
 
-    def forward(self, data, with_overlap=False):
+    def forward(self, data, with_overlap=False, size_divisor=1):
         """Run extractors and matchers
         Extractor is skipped if ['keypoints0', 'keypoints1'] exist in input
         Args:
           data: dictionary with minimal keys: ['image0', 'image1']
         """
+        pred = {}
         if self.config['direct'] and not with_overlap:
-            return self.matcher(data)
+            pred = update_default_info(pred, data)
+            pred.update(self.matcher(data))
+            return pred
 
         if with_overlap:
-            pred = {}
             self.device = data['overlap_image1'].device
             assert isinstance(data['overlap_scales0'], tuple)
             assert isinstance(data['overlap_scales1'], tuple)
@@ -101,18 +101,13 @@ class Matching(torch.nn.Module):
                 (data['dataset_name'] == 'pragueparks-val'
                  and overlap_scores > 2.0)
                     or data['dataset_name'] != 'pragueparks-val'):
-                if self.matcher_name == 'loftr':
-                    self.size_divisor = 8
-                elif self.matcher_name == 'm2omatcher':
-                    self.size_divisor = 32
-
                 overlap0, overlap1, ratio0, ratio1 = tensor_overlap_crop(
                     data['image0'],
                     bbox0,
                     data['image1'],
                     bbox1,
                     self.extractor_name,
-                    self.size_divisor,
+                    size_divisor,
                 )
 
                 pred.update({
@@ -143,32 +138,7 @@ class Matching(torch.nn.Module):
                     pred.update(dict((k + '1', v) for k, v in pred1.items()))
 
             else:
-                pred.update({
-                    'bbox0':
-                    torch.tensor(
-                        [[
-                            0.0,
-                            0.0,
-                            data['image0'].shape[3],
-                            data['image0'].shape[2],
-                        ]],
-                        device=bbox0.device,
-                    ),
-                    'bbox1':
-                    torch.tensor(
-                        [[
-                            0.0,
-                            0.0,
-                            data['image1'].shape[3],
-                            data['image1'].shape[2],
-                        ]],
-                        device=bbox0.device,
-                    ),
-                    'ratio0':
-                    torch.tensor([[1.0, 1.0]], device=bbox0.device),
-                    'ratio1':
-                    torch.tensor([[1.0, 1.0]], device=bbox0.device),
-                })
+                pred = update_default_info(pred, data)
                 if self.config['direct']:
                     matches = self.matcher(data)
                     pred.update(matches)
@@ -183,32 +153,7 @@ class Matching(torch.nn.Module):
         else:
             if not self.config['direct']:
                 pred = extract_process(self.extractor, data)
-                pred.update({
-                    'bbox0':
-                    torch.tensor(
-                        [[
-                            0.0,
-                            0.0,
-                            data['image0'].shape[3],
-                            data['image0'].shape[2],
-                        ]],
-                        device=data['image0'].device,
-                    ),
-                    'bbox1':
-                    torch.tensor(
-                        [[
-                            0.0,
-                            0.0,
-                            data['image1'].shape[3],
-                            data['image1'].shape[2],
-                        ]],
-                        device=data['image0'].device,
-                    ),
-                    'ratio0':
-                    torch.tensor([[1.0, 1.0]], device=data['image0'].device),
-                    'ratio1':
-                    torch.tensor([[1.0, 1.0]], device=data['image0'].device),
-                })
+            pred = update_default_info(pred, data)
 
         # Batch all features
         # We should either have i) one image per batch, or
@@ -284,7 +229,7 @@ def main(
     save=False,
     evaluate=False,
     warp_origin=True,
-    debug=False,
+    specific_dataset='',
 ):
     """main pipeline of matching process."""
     if resize is None:
@@ -304,9 +249,19 @@ def main(
     seq_pose = defaultdict(dict)
     seq_inparams = defaultdict(dict)
     seq_scale = defaultdict(dict)
+
+    if 'loftr' in config['matcher']['model']['name']:
+        size_divisor = 8
+    elif 'm2o' in config['matcher']['model']['name']:
+        size_divisor = 64
+    elif 'disk' in config['matcher']['model']['name']:
+        size_divisor = 32
+    else:
+        size_divisor = 1
+
     for i, pair in tqdm(enumerate(pairs), total=len(pairs)):
         name0, name1 = pair[:2]
-        if debug and 'googleurban-val' not in name0:
+        if specific_dataset and specific_dataset not in name0:  # googleurban
             continue
         gray = config['extractor']['preprocessing']['grayscale']
         # Load the image pair.
@@ -344,6 +299,7 @@ def main(
                 matching,
                 with_desc,
                 warp_origin=warp_origin,
+                size_divisor=size_divisor,
             )
         else:
             results = preprocess_match_pipeline(
@@ -571,8 +527,9 @@ if __name__ == '__main__':
         help='Warp keypoints to origin image scale.',
     )
     parser.add_argument(
-        '--debug',
-        action='store_true',
+        '--specific_dataset',
+        type=str,
+        default='',
         help='Debug with subset dataset.',
     )
     opt = parser.parse_args()
@@ -608,4 +565,5 @@ if __name__ == '__main__':
         save=opt.save,
         evaluate=opt.evaluate,
         warp_origin=opt.warp_origin,
+        specific_dataset=opt.specific_dataset,
     )

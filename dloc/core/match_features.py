@@ -126,6 +126,7 @@ def preprocess_match_pipeline(
     pair,
     matching,
     with_desc=False,
+    size_divisor=1,
 ):
     """main process of match pipeline.
 
@@ -145,10 +146,26 @@ def preprocess_match_pipeline(
     Returns:
         dict: return all processed information
     """
-    image0, inp0, scales0 = read_image(os.path.join(input, name0), device,
-                                       resize, 0, resize_float, gray, align)
-    image1, inp1, scales1 = read_image(os.path.join(input, name1), device,
-                                       resize, 0, resize_float, gray, align)
+    image0, inp0, scales0 = read_image(
+        os.path.join(input, name0),
+        device,
+        resize,
+        0,
+        resize_float,
+        gray,
+        align,
+        size_divisor=size_divisor,
+    )
+    image1, inp1, scales1 = read_image(
+        os.path.join(input, name1),
+        device,
+        resize,
+        0,
+        resize_float,
+        gray,
+        align,
+        size_divisor=size_divisor,
+    )
 
     # if image0 is None or image1 is None:
     #     raise ValueError(

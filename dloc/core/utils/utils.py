@@ -277,6 +277,7 @@ def read_overlap_image(
     grayscale=False,
     align='disk',
     overlap=False,
+    size_divisor=1,
 ):
     image = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if not align or align == 'm2o':  # or not overlap:
@@ -286,15 +287,9 @@ def read_overlap_image(
         return None, None, None
     image = image.astype(np.float32)
     w, h = image.shape[:2][::-1]
-    if align == 'disk':
-        w_new = math.ceil(w / 32) * 32
-        h_new = math.ceil(h / 32) * 32
-    elif align == 'loftr':
-        w_new = math.ceil(w / 8) * 8
-        h_new = math.ceil(h / 8) * 8
-    elif align == 'm2o':
-        w_new = math.ceil(w / 64) * 64
-        h_new = math.ceil(h / 64) * 64
+    if size_divisor > 1:
+        w_new = math.ceil(w / size_divisor) * size_divisor
+        h_new = math.ceil(h / size_divisor) * size_divisor
     else:
         w_new, h_new = process_resize(w, h, [-1])
 
@@ -413,6 +408,7 @@ def read_image(
     grayscale=False,
     align='disk',
     overlap=False,
+    size_divisor=1,
 ):
 
     if grayscale:
@@ -427,15 +423,9 @@ def read_image(
     w, h = image.shape[:2][::-1]
     # w, h = image.shape[1], image.shape[0]
     w_new, h_new = process_resize(w, h, resize)
-    if align == 'disk':
-        w_new = math.ceil(w_new / 16) * 16
-        h_new = math.ceil(h_new / 16) * 16
-    elif align == 'loftr':
-        w_new = math.ceil(w_new / 8) * 8
-        h_new = math.ceil(h_new / 8) * 8
-    elif align == 'm2o':
-        w_new = math.ceil(w_new / 64) * 64
-        h_new = math.ceil(h_new / 64) * 64
+    if size_divisor > 1:
+        w_new = math.ceil(w_new / size_divisor) * size_divisor
+        h_new = math.ceil(h_new / size_divisor) * size_divisor
 
     scales = (float(w) / float(w_new), float(h) / float(h_new))
 
@@ -512,6 +502,36 @@ def overlap_filter(mkpts1, bbox1, mkpts2, bbox2):
     return valid
 
 
+def update_default_info(pred, data):
+    pred.update({
+        'bbox0':
+        torch.tensor(
+            [[
+                0.0,
+                0.0,
+                data['image0'].shape[3],
+                data['image0'].shape[2],
+            ]],
+            device=data['image0'].device,
+        ),
+        'bbox1':
+        torch.tensor(
+            [[
+                0.0,
+                0.0,
+                data['image1'].shape[3],
+                data['image1'].shape[2],
+            ]],
+            device=data['image0'].device,
+        ),
+        'ratio0':
+        torch.tensor([[1.0, 1.0]], device=data['image0'].device),
+        'ratio1':
+        torch.tensor([[1.0, 1.0]], device=data['image0'].device),
+    })
+    return pred
+
+
 def tensor_overlap_crop(image1,
                         bbox1,
                         image2,
@@ -545,6 +565,7 @@ def tensor_overlap_crop(image1,
         new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
         ratio1 = [[float(new_w1) / float(w1), float(new_h1) / float(h1)]]
         ratio2 = [[float(new_w2) / float(w2), float(new_h2) / float(h2)]]
+
     cv_right = right.permute((1, 2, 0)).cpu().numpy() * 255
     cv_left = left.permute((1, 2, 0)).cpu().numpy() * 255
 
@@ -565,14 +586,15 @@ def tensor_overlap_crop(image1,
     #         cv_left.astype("float32"), (new_w1, new_h1), interpolation=cv2.INTER_CUBIC
     #     )
     if len(cv_right.shape) == 3:
-        right = (torch.from_numpy(cv_right / 255.).float().to(
+        right = (torch.from_numpy(cv_right / 255.0).float().to(
             image1.device).permute((2, 0, 1)))
-        left = (torch.from_numpy(cv_left / 255.).float().to(
+        left = (torch.from_numpy(cv_left / 255.0).float().to(
             image1.device).permute((2, 0, 1)))
     else:
-        right = torch.from_numpy(cv_right / 255.).float().to(
+        right = torch.from_numpy(cv_right / 255.0).float().to(
             image1.device)[None]
-        left = torch.from_numpy(cv_left / 255.).float().to(image1.device)[None]
+        left = torch.from_numpy(cv_left / 255.0).float().to(
+            image1.device)[None]
 
     return left[None], right[None], ratio1, ratio2
 

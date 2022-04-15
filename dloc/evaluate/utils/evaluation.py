@@ -216,12 +216,23 @@ def estimate_pose(kpts0, kpts1, K0, K1, thresh, conf=0.99999):
     kpts0 = (kpts0 - K0[[0, 1], [2, 2]][None]) / K0[[0, 1], [0, 1]][None]
     kpts1 = (kpts1 - K1[[0, 1], [2, 2]][None]) / K1[[0, 1], [0, 1]][None]
 
-    E, mask = cv2.findEssentialMat(kpts0,
-                                   kpts1,
-                                   np.eye(3),
-                                   threshold=norm_thresh,
-                                   prob=conf,
-                                   method=cv2.RANSAC)
+    # USAC_DEFAULT – has standard LO-RANSAC.
+    # USAC_PARALLEL – has LO-RANSAC and RANSACs run in parallel.
+    # USAC_ACCURATE – has GC-RANSAC.
+    # USAC_FAST – has LO-RANSAC with smaller number iterations in local optimization step.
+    #             Uses RANSAC score to maximize number of inliers and terminate earlier.
+    # USAC_PROSAC – has PROSAC sampling. Note, points must be sorted.
+    # USAC_FM_8PTS – has LO-RANSAC. Only valid for Fundamental matrix with 8-points solver.
+    # USAC_MAGSAC – has MAGSAC++.
+
+    E, mask = cv2.findEssentialMat(
+        kpts0,
+        kpts1,
+        np.eye(3),
+        threshold=norm_thresh,
+        prob=conf,
+        method=cv2.RANSAC,
+    )
 
     assert E is not None
 
