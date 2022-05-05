@@ -26,7 +26,10 @@ from ..utils.base_model import BaseModel  # noqa: E402
 
 class M2OMatcher(BaseModel):
     default_conf = {
-        'weights': 'm2o/m2omatcher.ckpt',
+        # "weights": "m2o/m2omatcher.ckpt",
+        # "weights": "m2o/epoch=26-auc@5=0.519-auc@10=0.691-auc@20=0.817.ckpt",
+        # "weights": "m2o/resnet_2s5c_25epoch.pth",  # "m2o/convnext_mini_2s5c_24epoch.pth", # "m2o/convnext_mini_2s5c.pth",
+        'weights': 'm2o/m2omatcher_40epoch.ckpt'
     }
     required_inputs = [
         'image0',

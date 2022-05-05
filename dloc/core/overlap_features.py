@@ -62,6 +62,7 @@ def process(
     dataset_name='googleurban',
     overlap=True,
     warp_origin=True,
+    size_divisor=1,
 ):
     """main process of match pipeline with overlap estimation.
 
@@ -100,6 +101,7 @@ def process(
                 'dataset_name': dataset_name,
             },
             overlap,
+            size_divisor,
         )
     else:
         pred = matching(
@@ -113,6 +115,7 @@ def process(
                 'dataset_name': dataset_name,
             },
             overlap,
+            size_divisor,
         )
 
     if 'ratio0' in pred:
@@ -226,6 +229,7 @@ def preprocess_overlap_pipeline(
         overlap_scales1,
         dataset_name,
         warp_origin=warp_origin,
+        size_divisor=size_divisor,
     )
 
     if index0.shape[0] < 30:

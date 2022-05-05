@@ -84,6 +84,22 @@ confs = {
         'output': 'matches-loftr',
         'model': {
             'name': 'loftr',
+            'weights': 'loftr/outdoor_960.ckpt',
+        },
+    },
+    'loftr_refine': {
+        'output': 'matches-loftr',
+        'model': {
+            'name': 'loftr',
+            'weights': 'loftr/outdoor_ds_self_cross.ckpt',
+            'coarse_layers': ['self', 'cross'] * 8,
+            'fine_layers': ['self', 'cross'] * 3,
+        },
+    },
+    'loftr_quad': {
+        'output': 'matches-loftr_quad',
+        'model': {
+            'name': 'loftr_quad',
         },
     },
     'm2o': {
@@ -111,6 +127,11 @@ confs = {
         },
     },
 }
+
+
+def valid_mask(keypoints, mask):
+    valid = mask[keypoints[:, 1], keypoints[:, 0]] < 8
+    return valid
 
 
 def preprocess_match_pipeline(
@@ -202,7 +223,28 @@ def preprocess_match_pipeline(
     matches, conf = pred['matches0'], pred['matching_scores0']
     if with_desc:
         desc0, desc1 = pred['descriptors0'], pred['descriptors1']
+
+    # seg_mask0 = cv2.imread(
+    #     "dataset/ImageMatching/masks/googleurban/{}/{}".format(
+    #         name0.split("/")[1], name0.split("/")[-1]
+    #     ),
+    #     cv2.IMREAD_GRAYSCALE,
+    # )
+    # seg_mask1 = cv2.imread(
+    #     "dataset/ImageMatching/masks/googleurban/{}/{}".format(
+    #         name1.split("/")[1], name1.split("/")[-1]
+    #     ),
+    #     cv2.IMREAD_GRAYSCALE,
+    # )
+    # valid = np.logical_and(
+    #     matches > -1,
+    #     np.logical_and(
+    #         valid_mask(kpts0.astype(np.int64), seg_mask0),
+    #         valid_mask(kpts1.astype(np.int64), seg_mask1),
+    #     ),
+    # )
     valid = matches > -1
+
     index0 = np.nonzero(valid)[0]
     index1 = matches[valid]
     results = {

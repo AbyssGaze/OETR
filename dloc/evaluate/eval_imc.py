@@ -28,7 +28,7 @@ def summary(state, total=False):
         for i in range(len(data)):
             if total and 'total' not in data[i].split('-')[0]:
                 continue
-            name = ''.ljust(20) if i > 0 else k.ljust(20)
+            name = ''.ljust(20) if i > 0 and not total else k.ljust(20)
             print('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t'.
                   format(
                       name,
@@ -48,7 +48,7 @@ def log_summary(error, method, logger, total=False):
     for i in range(len(data)):
         if total and 'total' not in data[i].split('-')[0]:
             continue
-        name = ''.ljust(20) if i > 0 else method.ljust(20)
+        name = ''.ljust(20) if i > 0 and not total else method.ljust(20)
         logger.info(
             '{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\t'.format(
                 name,
@@ -94,7 +94,7 @@ def benchmark_features(input_pairs,
         'phototourism-val': 0.6,
     }
     for _, data in tqdm(enumerate(loader), total=len(loader)):
-        if dynamic_threshold == 'sg':
+        if dynamic_threshold == 'sg1':
             results = validation_error(data, sg_thresholds[data['data'][0]])
         elif dynamic_threshold == 'nn':
             results = validation_error(data, nn_thresholds[data['data'][0]])

@@ -120,6 +120,7 @@ class Matching(torch.nn.Module):
                     'ratio1':
                     torch.tensor(ratio1, device=bbox0.device),
                 })
+
                 if self.config['direct']:
                     matches = self.matcher({
                         'image0': overlap0,
@@ -251,10 +252,10 @@ def main(
     seq_scale = defaultdict(dict)
 
     if 'loftr' in config['matcher']['model']['name']:
-        size_divisor = 8
+        size_divisor = 32
     elif 'm2o' in config['matcher']['model']['name']:
         size_divisor = 64
-    elif 'disk' in config['matcher']['model']['name']:
+    elif 'disk' in config['extractor']['model']['name']:
         size_divisor = 32
     else:
         size_divisor = 1
@@ -465,6 +466,8 @@ if __name__ == '__main__':
             'cotr',
             'loftr',
             'm2o',
+            'loftr_quad',
+            'loftr_refine',
         },
         default='indoor',
         help='SuperGlue weights',

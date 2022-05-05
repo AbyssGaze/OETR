@@ -245,11 +245,14 @@ class VideoStreamer:
 # --- PREPROCESSING ---
 
 
-def process_resize(w, h, resize):
+def process_resize(w, h, resize, maximum=False):
     assert len(resize) > 0 and len(resize) <= 2
     if len(resize) == 1 and resize[0] > -1:
-        scale = resize[0] / max(h, w)
-        w_new, h_new = int(round(w * scale)), int(round(h * scale))
+        if maximum and max(h, w) > resize[0]:
+            w_new, h_new = w, h
+        else:
+            scale = resize[0] / max(h, w)
+            w_new, h_new = int(round(w * scale)), int(round(h * scale))
     elif len(resize) == 1 and resize[0] == -1:
         w_new, h_new = w, h
     else:  # len(resize) == 2:
@@ -412,17 +415,17 @@ def read_image(
 ):
 
     if grayscale:
-        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        origin_image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     else:
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        if not align or align == 'm2o':
-            image = image[:, :, ::-1]  # BGR to RGB
-    if image is None:
+        origin_image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if not align or align == 'm2o' or align == 'loftr':
+            origin_image = origin_image[:, :, ::-1]  # BGR to RGB
+    if origin_image is None:
         return None, None, None
-    image = image.astype(np.float32)
-    w, h = image.shape[:2][::-1]
+    origin_image = origin_image.astype(np.float32)
+    w, h = origin_image.shape[:2][::-1]
     # w, h = image.shape[1], image.shape[0]
-    w_new, h_new = process_resize(w, h, resize)
+    w_new, h_new = process_resize(w, h, resize, maximum=False)
     if size_divisor > 1:
         w_new = math.ceil(w_new / size_divisor) * size_divisor
         h_new = math.ceil(h_new / size_divisor) * size_divisor
@@ -430,9 +433,9 @@ def read_image(
     scales = (float(w) / float(w_new), float(h) / float(h_new))
 
     if resize_float:
-        image = cv2.resize(image.astype('float32'), (w_new, h_new))
+        image = cv2.resize(origin_image.astype('float32'), (w_new, h_new))
     else:
-        image = cv2.resize(image, (w_new, h_new)).astype('float32')
+        image = cv2.resize(origin_image, (w_new, h_new)).astype('float32')
 
     if rotation != 0:
         image = np.rot90(image, k=rotation)
@@ -449,7 +452,7 @@ def read_image(
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     inp = torch.from_numpy(inp / 255.0).float().to(device)
 
-    return image, inp, scales
+    return origin_image, inp, scales
 
 
 def overlap_crop(image1, bbox1, image2, bbox2):
@@ -574,17 +577,6 @@ def tensor_overlap_crop(image1,
     cv_left = cv2.resize(cv_left.astype('float32'), (new_w1, new_h1),
                          interpolation=cv2.INTER_CUBIC)
 
-    # if size_divisor > 1:
-    #     new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
-    #     new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
-    #     cv_right = cv2.resize(
-    #         cv_right.astype("float32"), (new_w2, new_h2), interpolation=cv2.INTER_CUBIC
-    #     )
-    #     new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
-    #     new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
-    #     cv_left = cv2.resize(
-    #         cv_left.astype("float32"), (new_w1, new_h1), interpolation=cv2.INTER_CUBIC
-    #     )
     if len(cv_right.shape) == 3:
         right = (torch.from_numpy(cv_right / 255.0).float().to(
             image1.device).permute((2, 0, 1)))

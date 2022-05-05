@@ -39,6 +39,10 @@ class loftr(BaseModel):
 
     def _init(self, conf, model_path):
         self.conf = {**self.default_conf, **conf}
+        if 'coarse_layers' in self.conf and 'fine_layers' in self.conf:
+            default_cfg['coarse']['layer_names'] = self.conf['coarse_layers']
+            default_cfg['fine']['layer_names'] = self.conf['fine_layers']
+
         self.model = LoFTR(config=default_cfg)
         self.model.load_state_dict(
             torch.load(os.path.join(model_path,

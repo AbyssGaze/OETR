@@ -8,6 +8,7 @@
 """
 import cv2
 import numpy as np
+import pydegensac
 from skimage import measure, transform
 
 from .utils import (eval_essential_matrix, eval_match_score, get_projected_kp,
@@ -224,15 +225,18 @@ def estimate_pose(kpts0, kpts1, K0, K1, thresh, conf=0.99999):
     # USAC_PROSAC – has PROSAC sampling. Note, points must be sorted.
     # USAC_FM_8PTS – has LO-RANSAC. Only valid for Fundamental matrix with 8-points solver.
     # USAC_MAGSAC – has MAGSAC++.
-
-    E, mask = cv2.findEssentialMat(
-        kpts0,
-        kpts1,
-        np.eye(3),
-        threshold=norm_thresh,
-        prob=conf,
-        method=cv2.RANSAC,
-    )
+    if 1:
+        E, mask = cv2.findEssentialMat(
+            kpts0,
+            kpts1,
+            np.eye(3),
+            threshold=norm_thresh,
+            prob=conf,
+            method=cv2.RANSAC,
+        )
+    else:
+        E, mask = pydegensac.findFundamentalMatrix(kpts0, kpts1, norm_thresh)
+        mask = mask[:, None].astype(np.uint8)
 
     assert E is not None
 
