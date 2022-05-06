@@ -21,9 +21,9 @@ from src.config.default import get_cfg_defaults  # noqa: E402
 from src.loftr.loftr import LoFTR  # noqa: E402
 from src.loftr.utils.cvpr_ds_config import lower_config  # noqa: E402
 
-from .loftr import loftr  # noqa: E402
+from configs.loftr.outdoor.loftr_ds_quadtree import cfg  # noqa: F401
 
-# from configs.loftr.outdoor.loftr_ds_quadtree import cfg  # noqa: E402
+from .loftr import loftr  # noqa: E402
 
 
 class loftr_quad(loftr):
@@ -43,6 +43,7 @@ class loftr_quad(loftr):
         self.conf = {**self.default_conf, **config}
 
         self.model = LoFTR(config=lower_config(config['LOFTR']))
+
         self.model.load_state_dict(
             torch.load(os.path.join(model_path,
                                     self.conf['weights']))['state_dict'])

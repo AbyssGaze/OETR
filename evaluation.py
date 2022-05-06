@@ -381,6 +381,12 @@ def main(
                 if with_desc:
                     seq_descriptors[scene][name1.split('/')[-1]
                                            [:-4]] = results['desc1']
+
+        # valid = results["mconf"] > 0.5
+        # results["mconf"] = results["mconf"][valid]
+        # results["index0"] = results["index0"][valid]
+        # results["index1"] = results["index1"][valid]
+
         seq_matches[scene]['{}-{}'.format(
             name0.split('/')[-1][:-4],
             name1.split('/')[-1][:-4])] = np.concatenate([[results['index0']],

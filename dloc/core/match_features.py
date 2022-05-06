@@ -243,6 +243,8 @@ def preprocess_match_pipeline(
     #         valid_mask(kpts1.astype(np.int64), seg_mask1),
     #     ),
     # )
+
+    # valid = np.logical_and(matches > -1, conf > 0.6)
     valid = matches > -1
 
     index0 = np.nonzero(valid)[0]
