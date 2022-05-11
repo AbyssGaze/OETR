@@ -120,7 +120,6 @@ class Matching(torch.nn.Module):
                     'ratio1':
                     torch.tensor(ratio1, device=bbox0.device),
                 })
-
                 if self.config['direct']:
                     matches = self.matcher({
                         'image0': overlap0,

@@ -271,6 +271,7 @@ def frame2tensor(frame, device):
     return torch.from_numpy(frame / 255.0).float()[None, None].to(device)
 
 
+# overlap inference image resized with 640, and images are resized with resize list
 def read_overlap_image(
     path,
     device,
@@ -290,19 +291,15 @@ def read_overlap_image(
         return None, None, None
     image = image.astype(np.float32)
     w, h = image.shape[:2][::-1]
-    if size_divisor > 1:
-        w_new = math.ceil(w / size_divisor) * size_divisor
-        h_new = math.ceil(h / size_divisor) * size_divisor
-    else:
-        w_new, h_new = process_resize(w, h, [-1])
 
     if overlap:
-        if len(resize) == 1 and resize[0] == -1:
-            w_new_overlap, h_new_overlap = w, h
-        else:
-            w_new_overlap, h_new_overlap = resize[0], resize[0]
-    else:
-        w_new, h_new = process_resize(w, h, resize)
+        w_new_overlap, h_new_overlap = 640, 640  # process_resize(w, h, [640])
+
+    w_new, h_new = process_resize(w, h, resize)
+
+    if size_divisor > 1:
+        w_new = math.ceil(w_new / size_divisor) * size_divisor
+        h_new = math.ceil(h_new / size_divisor) * size_divisor
 
     scales = (float(w) / float(w_new), float(h) / float(h_new))
     if overlap:
@@ -319,8 +316,8 @@ def read_overlap_image(
     else:
         image = cv2.resize(image, (w_new, h_new)).astype('float32')
         if overlap:
-            overlap_image = cv2.resize(image.astype('float32'),
-                                       (w_new_overlap, h_new_overlap))
+            overlap_image = cv2.resize(
+                image, (w_new_overlap, h_new_overlap)).astype('float32')
 
     if rotation != 0:
         image = np.rot90(image, k=rotation)
@@ -535,12 +532,68 @@ def update_default_info(pred, data):
     return pred
 
 
-def tensor_overlap_crop(image1,
-                        bbox1,
-                        image2,
-                        bbox2,
-                        extractor_name,
-                        size_divisor=1):
+# def tensor_overlap_crop(
+#     image1, bbox1, image2, bbox2, extractor_name, size_divisor=1, resize=[-1]
+# ):
+#     bbox1 = bbox1[0].int()
+#     bbox2 = bbox2[0].int()
+#     origin_w1, origin_h1 = image1.shape[2:][::-1]
+#     origin_w2, origin_h2 = image2.shape[2:][::-1]
+
+#     left = image1[0, :, bbox1[1] : bbox1[3], bbox1[0] : bbox1[2]]
+#     right = image2[0, :, bbox2[1] : bbox2[3], bbox2[0] : bbox2[2]]
+
+#     w1, h1 = left.shape[1:][::-1]
+#     w2, h2 = right.shape[1:][::-1]
+#     new_w1, new_h1 = process_resize(w1, h1, [1280])
+#     new_w2, new_h2 = process_resize(w2, h2, [1280])
+#     if size_divisor > 1:
+#         new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
+#         new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
+#         new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
+#         new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
+#     ratio1 = [[float(new_w1) / float(w1), float(new_h1) / float(h1)]]
+#     ratio2 = [[float(new_w2) / float(w2), float(new_h2) / float(h2)]]
+#     cv_right = right.permute((1, 2, 0)).cpu().numpy() * 255
+#     cv_left = left.permute((1, 2, 0)).cpu().numpy() * 255
+
+#     cv_right = cv2.resize(
+#         cv_right.astype("float32"), (new_w2, new_h2), interpolation=cv2.INTER_CUBIC
+#     )
+#     cv_left = cv2.resize(
+#         cv_left.astype("float32"), (new_w1, new_h1), interpolation=cv2.INTER_CUBIC
+#     )
+
+#     if len(cv_right.shape) == 3:
+#         right = (
+#             torch.from_numpy(cv_right / 255.0)
+#             .float()
+#             .to(image1.device)
+#             .permute((2, 0, 1))
+#         )
+#         left = (
+#             torch.from_numpy(cv_left / 255.0)
+#             .float()
+#             .to(image1.device)
+#             .permute((2, 0, 1))
+#         )
+#     else:
+#         right = torch.from_numpy(cv_right / 255.0).float().to(image1.device)[None]
+#         left = torch.from_numpy(cv_left / 255.0).float().to(image1.device)[None]
+
+#     return left[None], right[None], ratio1, ratio2
+
+
+def tensor_overlap_crop(
+    image1,
+    bbox1,
+    image2,
+    bbox2,
+    extractor_name,
+    size_divisor=1,
+    resize=[-1],
+    align_overlap=False,
+):
     bbox1 = bbox1[0].int()
     bbox2 = bbox2[0].int()
     origin_w1, origin_h1 = image1.shape[2:][::-1]
@@ -551,23 +604,28 @@ def tensor_overlap_crop(image1,
 
     w1, h1 = left.shape[1:][::-1]
     w2, h2 = right.shape[1:][::-1]
-    if origin_w1 * origin_h1 >= origin_w2 * origin_h2:
-        ratio1, new_w1, new_h1 = patch_resize(origin_w1, origin_h1, w1, h1,
-                                              extractor_name)
-        ratio2, new_w2, new_h2 = patch_resize(origin_w1, origin_h1, w2, h2,
-                                              extractor_name)
+    if align_overlap:
+        new_w1, new_h1 = process_resize(w1, h1, [1280])
+        new_w2, new_h2 = process_resize(w2, h2, [1280])
     else:
-        ratio1, new_w1, new_h1 = patch_resize(origin_w2, origin_h2, w1, h1,
-                                              extractor_name)
-        ratio2, new_w2, new_h2 = patch_resize(origin_w2, origin_h2, w2, h2,
-                                              extractor_name)
+        if origin_w1 * origin_h1 >= origin_w2 * origin_h2:
+            ratio1, new_w1, new_h1 = patch_resize(origin_w1, origin_h1, w1, h1,
+                                                  extractor_name)
+            ratio2, new_w2, new_h2 = patch_resize(origin_w1, origin_h1, w2, h2,
+                                                  extractor_name)
+        else:
+            ratio1, new_w1, new_h1 = patch_resize(origin_w2, origin_h2, w1, h1,
+                                                  extractor_name)
+            ratio2, new_w2, new_h2 = patch_resize(origin_w2, origin_h2, w2, h2,
+                                                  extractor_name)
+
     if size_divisor > 1:
         new_w2 = math.ceil(new_w2 / size_divisor) * size_divisor
         new_h2 = math.ceil(new_h2 / size_divisor) * size_divisor
         new_w1 = math.ceil(new_w1 / size_divisor) * size_divisor
         new_h1 = math.ceil(new_h1 / size_divisor) * size_divisor
-        ratio1 = [[float(new_w1) / float(w1), float(new_h1) / float(h1)]]
-        ratio2 = [[float(new_w2) / float(w2), float(new_h2) / float(h2)]]
+    ratio1 = [[float(new_w1) / float(w1), float(new_h1) / float(h1)]]
+    ratio2 = [[float(new_w2) / float(w2), float(new_h2) / float(h2)]]
 
     cv_right = right.permute((1, 2, 0)).cpu().numpy() * 255
     cv_left = left.permute((1, 2, 0)).cpu().numpy() * 255
