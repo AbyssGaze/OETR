@@ -316,6 +316,8 @@ def main(
                 matching,
                 with_desc,
                 size_divisor=size_divisor,
+                cross_match=True,
+                kpts_nms=None,
                 # warp_origin=warp_origin,
             )
             if 'icp' in config['matcher']['model']['name']:

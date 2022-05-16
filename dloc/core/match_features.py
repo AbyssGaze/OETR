@@ -134,6 +134,25 @@ def valid_mask(keypoints, mask):
     return valid
 
 
+def simple_nms(scores, kpts, nms_radius=3):
+    """Fast Non-maximum suppression to remove nearby points."""
+
+    assert nms_radius >= 0
+
+    order = scores.argsort()[::-1]
+    keep = []
+
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        distance = np.linalg.norm(kpts[i] - kpts[order[1:]], axis=1)
+        inds = np.where(distance > nms_radius)[0]
+        order = order[inds + 1]
+    valid = np.array([False] * kpts.shape[0])
+    valid[keep] = True
+    return valid
+
+
 def preprocess_match_pipeline(
     input,
     name0,
@@ -148,6 +167,8 @@ def preprocess_match_pipeline(
     matching,
     with_desc=False,
     size_divisor=1,
+    cross_match=False,
+    kpts_nms=None,
 ):
     """main process of match pipeline.
 
@@ -216,11 +237,67 @@ def preprocess_match_pipeline(
                 'landmark': template_kpts
             })
         else:
-            pred = matching({'image0': inp0, 'image1': inp1})
+            if cross_match:
+                pred0_1 = matching({'image0': inp0, 'image1': inp1})
+                pred1_0 = matching({'image0': inp1, 'image1': inp0})
+                pred = {}
+                pred['keypoints0'] = [
+                    torch.cat([
+                        pred0_1['keypoints0'][0],
+                        pred1_0['keypoints1'][0][pred1_0['matches0'][0]],
+                    ])
+                ]
+                pred['keypoints1'] = [
+                    torch.cat(
+                        [pred0_1['keypoints1'][0], pred1_0['keypoints0'][0]])
+                ]
+                pred['matches0'] = [
+                    torch.cat([
+                        pred0_1['matches0'][0],
+                        torch.arange(
+                            len(pred0_1['matches0'][0]),
+                            len(pred0_1['matches0'][0]) +
+                            len(pred1_0['matches0'][0]),
+                        ).to(pred0_1['matches0'][0].device)
+                        # pred1_0["matches0"][0] + len(pred0_1["matches0"][0]),
+                    ])
+                ]
+                pred['matching_scores0'] = [
+                    torch.cat([
+                        pred0_1['matching_scores0'][0],
+                        pred1_0['matching_scores0'][0]
+                    ])
+                ]
+                if with_desc:
+                    pred['descriptors0'] = [
+                        torch.cat([
+                            pred0_1['descriptors0'][0],
+                            pred1_0['descriptors1'][0][pred1_0['matches0'][0]],
+                        ])
+                    ]
+                    pred['descriptors1'] = [
+                        torch.cat([
+                            pred0_1['descriptors1'][0],
+                            pred1_0['descriptors0'][0]
+                        ])
+                    ]
+            else:
+                pred = matching({'image0': inp0, 'image1': inp1})
+
     # prediction results to numpy array
     pred = dict((k, v[0].cpu().numpy()) for k, v in pred.items())
     kpts0, kpts1 = pred['keypoints0'] * scales0, pred['keypoints1'] * scales1
     matches, conf = pred['matches0'], pred['matching_scores0']
+
+    if kpts_nms is not None:
+        valid0 = simple_nms(conf, kpts0)
+        valid1 = simple_nms(conf, kpts1[matches])
+        valid = np.logical_and(valid0, valid1)
+        kpts0 = kpts0[valid]
+        kpts1 = kpts1[matches][valid]
+        matches = np.arange(kpts0.shape[0])
+        conf = conf[valid]
+
     if with_desc:
         desc0, desc1 = pred['descriptors0'], pred['descriptors1']
 
