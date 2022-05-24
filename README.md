@@ -1,4 +1,6 @@
 # Guide Local Feature Matching by Overlap Estimation
+> update 20220524: Code has been published in https://github.com/TencentYoutuResearch/ImageMatching-OETR, Since we can't go through the open-source process twice, all the code of the reasoning part is also merged into this project. If other papers are published later, they can go through the open-source process. We will split it up to make it better. Thank you very much.
+
 > update: The training part of the code has been in the open-source review process of the department on 3.29, and it will take a certain amount of time to review it. After the director's approval, the open-source will be completed as soon as possible. 
 
 > update: Since our code open source requires review and related patent support, we need to complete the application for the relevant process. After completing the submission of eccv2022, we will go all out to complete the various processes required for open source, and it is expected that the open source will be completed around April 1. Thank you.
