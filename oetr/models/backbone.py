@@ -142,7 +142,7 @@ class ResnetEncoder(nn.Module):
             152: models.resnet152
         }
         # pdb.set_trace()
-        encoder = resnets[cfg.BACKBONE.NUM_LAYERS](True)
+        encoder = resnets[cfg.BACKBONE.NUM_LAYERS](False)
         self.encoder = encoder
 
         self.layer0 = nn.Sequential(encoder.conv1, encoder.bn1, encoder.relu)

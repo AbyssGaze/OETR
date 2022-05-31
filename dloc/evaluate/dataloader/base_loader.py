@@ -64,12 +64,16 @@ class BaseDataset(torch.utils.data.Dataset):
             self.seq_name = seq_name
 
         if self.pairwise:
-            kpts0 = self.keypoints['{}-{}'.format(
-                info[0].split('/')[-1][:-4],
-                info[1].split('/')[-1][:-4])].__array__()
-            kpts1 = self.keypoints['{}-{}'.format(
-                info[1].split('/')[-1][:-4],
-                info[0].split('/')[-1][:-4])].__array__()
+            try:
+                kpts0 = self.keypoints['{}-{}'.format(
+                    info[0].split('/')[-1][:-4],
+                    info[1].split('/')[-1][:-4])].__array__()
+                kpts1 = self.keypoints['{}-{}'.format(
+                    info[1].split('/')[-1][:-4],
+                    info[0].split('/')[-1][:-4])].__array__()
+            except:
+                from IPython import embed
+                embed()
             if self.inparams is not None and len(self.inparams.keys()) > 0:
                 inparams0 = self.inparams['{}-{}'.format(
                     info[0].split('/')[-1][:-4],

@@ -7,6 +7,7 @@
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
 import argparse
+import collections.abc as container_abcs
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -224,7 +225,7 @@ def main(
     output,
     with_desc=False,
     resize=None,
-    resize_float=False,  # True,
+    resize_float=True,  # True,
     viz=False,
     save=False,
     evaluate=False,
@@ -252,8 +253,9 @@ def main(
 
     if 'loftr' in config['matcher']['model']['name']:
         size_divisor = 32
-    elif 'm2o' in config['matcher']['model']['name']:
-        size_divisor = 64
+    elif 'm2o' in config['matcher']['model']['name'] or 'Ada' in config[
+            'matcher']['model']['name']:
+        size_divisor = 32  # 64
     elif 'disk' in config['extractor']['model']['name']:
         size_divisor = 32
     else:
@@ -263,7 +265,11 @@ def main(
         name0, name1 = pair[:2]
         if specific_dataset and specific_dataset not in name0:  # googleurban
             continue
-        gray = config['extractor']['preprocessing']['grayscale']
+        if config['extractor']['model']['name'] == 'landmark':
+            gray = config['matcher']['preprocessing']['grayscale']
+        else:
+            gray = config['extractor']['preprocessing']['grayscale']
+
         # Load the image pair.
         align = ''
         if 'disk' in config['extractor']['output']:
@@ -271,11 +277,12 @@ def main(
         elif 'loftr' in config['matcher']['output']:
             align = 'loftr'
             with_desc = False
-        elif 'm2o' in config['matcher']['output']:
+        elif 'm2o' in config['matcher']['output'] or 'Ada' in config[
+                'matcher']['output']:
             align = 'm2o'
             with_desc = False
 
-        if 'megadepth' in input_pairs:
+        if 'megadepth' in input_pairs or 'yfcc' in input_pairs:
             scene = name0.split('/')[1]
         elif 'imc' in input_pairs:
             scene = name0.split('/')[0] + '/' + name0.split('/')[1]
@@ -316,7 +323,7 @@ def main(
                 matching,
                 with_desc,
                 size_divisor=size_divisor,
-                cross_match=True,
+                cross_match=False,
                 kpts_nms=None,
                 # warp_origin=warp_origin,
             )
@@ -333,7 +340,10 @@ def main(
         # Write matching results
         if ('loftr' in config['matcher']['output']
                 or 'm2o' in config['matcher']['output']
-                or config['overlaper'] is not None):
+                or 'quad' in config['matcher']['output']
+                or config['overlaper'] is not None
+                or 'hynet' in config['matcher']['output']
+                or 'hardnet' in config['matcher']['output']):
             # For all matcher-dependent keypoints
             im0, im1 = name0.split('/')[-1][:-4], name1.split('/')[-1][:-4]
             if '{}-{}'.format(im0, im1) not in seq_keypoints[scene]:
@@ -464,17 +474,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '--matcher',
         choices={
-            'superglue_outdoor',
-            'superglue_disk',
-            'superglue_swin_disk',
-            'superglue_indoor',
-            'NN',
-            'disk',
-            'cotr',
-            'loftr',
-            'm2o',
-            'loftr_quad',
-            'loftr_refine',
+            'superglue_outdoor', 'superglue_disk', 'superglue_swin_disk',
+            'superglue_indoor', 'NN', 'disk', 'cotr', 'loftr', 'm2o',
+            'Ada_quad', 'loftr_quad', 'loftr_quad_simam', 'loftr_refine',
+            'sift_hardnet', 'keynet_hynet'
         },
         default='indoor',
         help='SuperGlue weights',

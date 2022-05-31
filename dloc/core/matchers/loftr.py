@@ -7,18 +7,21 @@
 @Copyright:  Copyright (C) Tencent. All rights reserved.
 """
 import os
-import sys
-from pathlib import Path
 
 import numpy as np
 import torch
 
-sys.path.append(str(Path(__file__).parent / '../../../third_party/LoFTR/'))
-
-from src.loftr.loftr import LoFTR  # noqa: E402
-from src.loftr.utils.cvpr_ds_config import default_cfg  # noqa: E402
+from third_party.LoFTR.src.loftr.loftr import LoFTR  # noqa: E402
+from third_party.LoFTR.src.loftr.utils.cvpr_ds_config import \
+    default_cfg  # noqa: E402
 
 from ..utils.base_model import BaseModel  # noqa: E402
+
+# from pathlib import Path
+
+# sys.path.append(str(Path(__file__).parent / "../../../third_party/LoFTR/"))
+
+# sys.path.append(str(Path(__file__).parent / "../../../third_party/LoFTR/"))
 
 
 class loftr(BaseModel):

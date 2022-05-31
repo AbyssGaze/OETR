@@ -293,7 +293,7 @@ def read_overlap_image(
     w, h = image.shape[:2][::-1]
 
     if overlap:
-        w_new_overlap, h_new_overlap = 640, 640  # process_resize(w, h, [640])
+        w_new_overlap, h_new_overlap = process_resize(w, h, [640])
 
     w_new, h_new = process_resize(w, h, resize)
 
@@ -410,7 +410,6 @@ def read_image(
     overlap=False,
     size_divisor=1,
 ):
-
     if grayscale:
         origin_image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     else:
@@ -418,6 +417,8 @@ def read_image(
         if not align or align == 'm2o' or align == 'loftr':
             origin_image = origin_image[:, :, ::-1]  # BGR to RGB
     if origin_image is None:
+        from IPython import embed
+        embed()
         return None, None, None
     origin_image = origin_image.astype(np.float32)
     w, h = origin_image.shape[:2][::-1]

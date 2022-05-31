@@ -158,7 +158,9 @@ def main(
 
         if os.path.exists(os.path.join(results_path, folder)):
             if ('loftr' in method.lower() or 'oetr' in method.lower()
-                    or 'm2o' in method.lower()):
+                    or 'm2o' in method.lower() or 'ada' in method.lower()
+                    or 'hardnet' in method.lower()
+                    or 'hynet' in method.lower()):
                 errors[method] = benchmark_features(
                     input_pairs,
                     os.path.join(results_path, folder),

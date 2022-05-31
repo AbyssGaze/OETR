@@ -26,7 +26,7 @@ confs = {
         'model': {
             'name': 'superglue',
             'weights': 'outdoor',
-            'sinkhorn_iterations': 30,
+            'sinkhorn_iterations': 20,
             'match_threshold': 0.2,
         },
     },
@@ -84,7 +84,22 @@ confs = {
         'output': 'matches-loftr',
         'model': {
             'name': 'loftr',
-            'weights': 'loftr/outdoor_960.ckpt',
+            'weights': 'loftr/outdoor_ds.ckpt',
+        },
+        'preprocessing': {
+            'grayscale': True,
+        },
+    },
+    'sift_hardnet': {
+        'output': 'matches-sift_hardnet',
+        'model': {
+            'name': 'sift_hardnet',
+        },
+    },
+    'keynet_hynet': {
+        'output': 'matches-keynet_hynet',
+        'model': {
+            'name': 'keynet_hynet',
         },
     },
     'loftr_refine': {
@@ -95,17 +110,45 @@ confs = {
             'coarse_layers': ['self', 'cross'] * 8,
             'fine_layers': ['self', 'cross'] * 3,
         },
+        'preprocessing': {
+            'grayscale': True,
+        },
     },
     'loftr_quad': {
         'output': 'matches-loftr_quad',
         'model': {
             'name': 'loftr_quad',
+            'weights': 'loftr_quad/epoch_25.ckpt',
+        },
+        'preprocessing': {
+            'grayscale': True,
+        },
+    },
+    'loftr_quad_simam': {
+        'output': 'matches-loftr_simam_quad',
+        'model': {
+            'name': 'loftr_quad',
+            'weights': 'loftr_quad/outdoor_simam.ckpt',
+            'backbone_type': 'SimamFPN',
+            'attention_type': 'simam',
         },
     },
     'm2o': {
         'output': 'matches-m2o',
         'model': {
             'name': 'm2omatcher',
+        },
+        'preprocessing': {
+            'grayscale': False,
+        },
+    },
+    'Ada_quad': {
+        'output': 'matches-Ada_quad',
+        'model': {
+            'name': 'Ada_quad',
+        },
+        'preprocessing': {
+            'grayscale': False,
         },
     },
     'icp': {
@@ -151,6 +194,41 @@ def simple_nms(scores, kpts, nms_radius=3):
     valid = np.array([False] * kpts.shape[0])
     valid[keep] = True
     return valid
+
+
+def get_gpu_memory(name='', id=0):
+    t = torch.cuda.get_device_properties(id).total_memory
+    # c = torch.cuda.memory_reserved(id)
+    a = torch.cuda.memory_allocated(id)
+    # f = c-a  # free inside cache
+    return to_GB(a), to_GB(t)
+
+
+def to_GB(memory):
+    return round(memory / 1024**3, 1)
+
+
+import subprocess
+
+
+def get_gpu_memory_map(id=0):
+    """Get the current gpu usage.
+
+    Returns
+    -------
+    usage: dict
+        Keys are device ids as integers.
+        Values are memory usage as integers in MB.
+    """
+    result = subprocess.check_output(
+        [
+            'nvidia-smi', '--query-gpu=memory.used',
+            '--format=csv,nounits,noheader'
+        ],
+        encoding='utf-8',
+    )
+    gpu_memory = [int(x) for x in result.strip().split('\n')]
+    return gpu_memory[id] / 1024.0
 
 
 def preprocess_match_pipeline(
@@ -213,6 +291,7 @@ def preprocess_match_pipeline(
     #     raise ValueError(
     #         "Problem reading image pair: {}/{} {}/{}".format(input, name0, input, name1)
     #     )
+
     if 'icp' in config['matcher']['model']['name']:
         mask0 = get_foreground_mask(image0.astype(np.uint8),
                                     **config['matcher']['preprocessing'])
@@ -326,6 +405,11 @@ def preprocess_match_pipeline(
 
     index0 = np.nonzero(valid)[0]
     index1 = matches[valid]
+    # if index0.shape[0] != kpts0.shape[0]:
+    #     from IPython import embed
+
+    #     embed()
+
     results = {
         'image0': image0,
         'image1': image1,

@@ -12,7 +12,7 @@ from parser import arg_parse
 
 import numpy as np
 import torch
-from dataloader.megadepth import MegaDepthDataset
+from dataloader.yfcc import YfccDataset
 from tqdm import tqdm
 from utils.evaluation import validation_error
 from utils.utils import get_logger, pose_auc
@@ -33,13 +33,13 @@ def log_summary(error, method, logger):
 
 
 def benchmark_features(input_pairs, results_path, pairwise=False):
-    loader = MegaDepthDataset(input_pairs, results_path, pairwise=pairwise)
+    loader = YfccDataset(input_pairs, results_path, pairwise=pairwise)
     loader = torch.utils.data.DataLoader(loader, num_workers=0)
     pose_errors = []
     precisions = []
     matching_scores = []
     for _, data in tqdm(enumerate(loader), total=len(loader)):
-        results = validation_error(data, 0.5)
+        results = validation_error(data)
         pose_error = np.maximum(results['error_t'], results['error_R'])
         pose_errors.append(pose_error)
         precisions.append(results['precision'])
@@ -64,9 +64,9 @@ def main(input_pairs, results_path, methods_file, dataset_path='', viz=False):
         method = methods[i][1]
         folder = methods[i][0]
         if os.path.exists(os.path.join(results_path, folder)):
-            if 'loftr' in method.lower() or 'oetr' in method.lower(
-            ) or 'hardnet' in method.lower() or 'hynet' in method.lower(
-            ) or 'm2o' in method.lower():
+            if 'loftr' in method.lower() or 'oetr' in method.lower() \
+               or 'm2o' in method.lower() or 'quad' in method.lower()  \
+               or 'hardnet' in method.lower() or 'hynet' in method.lower():
                 errors[method] = benchmark_features(input_pairs,
                                                     os.path.join(
                                                         results_path, folder),

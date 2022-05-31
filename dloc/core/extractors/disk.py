@@ -10,7 +10,7 @@ import torch
 
 disk_path = Path(__file__).parent / '../../../third_party/disk'
 sys.path.append(str(disk_path))
-from disk.model.disk import DISK  # noqa: E402
+from model.disk import DISK  # noqa: E402
 
 from ..utils.base_model import BaseModel  # noqa: E402
 

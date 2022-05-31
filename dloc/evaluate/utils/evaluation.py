@@ -277,6 +277,40 @@ def compute_epipolar_error(kpts0, kpts1, T_0to1, K0, K1):
     return d
 
 
+def checkPose(kpts0, kpts1, T_0_1, metric='F'):
+    kpts0 = to_homogeneous(kpts0).transpose(1, 0)
+    kpts1 = to_homogeneous(kpts1).transpose(1, 0)
+    if metric == 'F':
+        th = 3.841
+    else:
+        th = 5.991
+    th_score = 5.991
+
+    if metric == 'F':
+        Ep0 = T_0_1 @ kpts0
+        p1Ep0 = np.sum(kpts1 * Ep0, axis=0)
+        distance = p1Ep0**2 / (Ep0[0] * Ep0[0] + Ep0[1] * Ep0[1])
+    else:
+        kpts0_1 = T_0_1 @ kpts0
+        kpts0_1 = kpts0_1[:2] / kpts0_1[2]
+        distance = np.linalg.norm((kpts1[:2] - kpts0_1), axis=0)
+    scores1 = th_score - distance
+    valid1 = distance < th
+
+    if metric == 'F':
+        Ep1 = T_0_1.T @ kpts1
+        p0Ep1 = np.sum(kpts0 * Ep1, axis=0)
+        distance = p0Ep1**2 / (Ep1[0] * Ep1[0] + Ep1[1] * Ep1[1])
+    else:
+        kpts1_0 = np.linalg.inv(T_0_1) @ kpts1
+        kpts1_0 = kpts1_0[:2] / kpts1_0[2]
+        distance = np.linalg.norm((kpts0[:2] - kpts1_0), axis=0)
+    scores0 = th_score - distance
+    valid0 = distance < th
+    scores = scores0[valid0].sum() + scores1[valid1].sum()
+    return scores
+
+
 def angle_error_mat(R1, R2):
     cos = (np.trace(np.dot(R1.T, R2)) - 1) / 2
     cos = np.clip(cos, -1.0, 1.0)  # numercial errors can make it out of bounds
@@ -311,8 +345,10 @@ def validation_error(data, thresh=1.0):
         kpts1 = pt1[i]
         kpts2 = pt2[i]
         matches = data['matches'][i]
+
         mkpts1 = kpts1[matches[0]].cpu().numpy()
         mkpts2 = kpts2[matches[1]].cpu().numpy()
+
         K1 = data['intrinsics0'][i].cpu().numpy()
         K2 = data['intrinsics1'][i].cpu().numpy()
         T_1to2 = data['pose'][i].view(4, 4).cpu().numpy()
@@ -339,6 +375,7 @@ def validation_error(data, thresh=1.0):
         else:
             # K_n1to1 = K_n2to2 = None
             epi_errs = compute_epipolar_error(mkpts1, mkpts2, T_1to2, K1, K2)
+
         correct = epi_errs < 5e-4
         num_correct = np.sum(correct)
         precision = np.mean(correct) if len(correct) > 0 else 0
